@@ -18,3 +18,4 @@ __pycache__/
 
 # one-off bootstrap script
 make_module0.py
+make_module*.py
