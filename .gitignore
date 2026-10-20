@@ -1,0 +1,20 @@
+# secrets
+keys/*private*
+.env
+.streamlit/secrets.toml
+
+# large or regenerable data
+data/raw/
+data/clean/
+models/
+
+# python and tooling
+__pycache__/
+*.egg-info/
+.ipynb_checkpoints/
+.pytest_cache/
+.venv/
+.DS_Store
+
+# one-off bootstrap script
+make_module0.py

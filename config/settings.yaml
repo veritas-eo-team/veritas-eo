@@ -1,0 +1,75 @@
+# Settings for the weather-data trust monitor.
+# Values marked "placeholder" are starting points. src.eval.tune writes tuned
+# values to config/tuned.yaml, which overrides this file (except locations).
+
+target: ALLSKY_SFC_SW_DWN
+context_vars: [CLRSKY_SFC_SW_DWN, T2M, RH2M, PRECTOTCORR, GWETTOP]
+start: "2018-01-01"
+end: "2024-12-31"
+test_year: 2024
+eps: 0.01
+neighbor_offset_deg: 1.0
+
+locations:
+  # train split: models and thresholds are fit on these only
+  - {id: tunis,         lat: 36.80,  lon: 10.18,   climate: mediterranean,     split: train}
+  - {id: tozeur,        lat: 33.92,  lon: 8.13,    climate: desert,            split: train}
+  - {id: seville,       lat: 37.39,  lon: -5.98,   climate: mediterranean,     split: train}
+  - {id: phoenix,       lat: 33.45,  lon: -112.07, climate: desert,            split: train}
+  - {id: paris,         lat: 48.86,  lon: 2.35,    climate: temperate,         split: train}
+  - {id: ames,          lat: 42.03,  lon: -93.62,  climate: farmland,          split: train}
+  - {id: manaus,        lat: -3.12,  lon: -60.02,  climate: tropical_forest,   split: train}
+  - {id: nairobi,       lat: -1.29,  lon: 36.82,   climate: tropical_highland, split: train}
+  - {id: black_forest,  lat: 48.00,  lon: 8.20,    climate: forest,            split: train}
+  - {id: ludhiana,      lat: 30.90,  lon: 75.85,   climate: farmland,          split: train}
+  # test split: never read during training or tuning
+  - {id: kairouan,      lat: 35.68,  lon: 10.10,   climate: semi_arid,         split: test}
+  - {id: alice_springs, lat: -23.70, lon: 133.88,  climate: desert,            split: test}
+  - {id: lyon,          lat: 45.76,  lon: 4.84,    climate: temperate,         split: test}
+  - {id: abidjan,       lat: 5.36,   lon: -4.01,   climate: tropical,          split: test}
+  - {id: pergamino,     lat: -33.89, lon: -60.57,  climate: farmland,          split: test}
+
+context_model:
+  alpha: 1.0          # placeholder: ridge penalty
+  sigma_min: 0.02     # placeholder: floor on predicted std of the log gap
+
+step:
+  k: 0.25             # placeholder: CUSUM allowance in z units (tuning: half the z-shift of a 12% step)
+  h: 12.0             # placeholder: CUSUM decision limit
+  phi: 0.3            # placeholder: AR(1) prewhitening coefficient (tuning estimates it)
+
+drift:
+  lambda: 0.05        # placeholder: EWMA smoothing
+  L: 3.0              # placeholder: EWMA control-limit width
+  slope_window: 60    # placeholder: days in the rolling slope fit
+  t_thr: 4.0          # placeholder: slope t-statistic threshold
+
+replay:
+  m: 7                # window length in days
+  decimals: 2         # rounding before exact matching (POWER reports 2 decimals)
+  near_thr: 0.9       # placeholder: near-copy similarity threshold
+  disagree_thr: 1.0   # placeholder: rolling mean |z| needed to count a near copy
+  stuck_run: 5        # identical values in a row that count as stuck
+  min_window_std: 0.05  # placeholder: skip near-constant windows (target units)
+
+consistency:
+  clearsky_tol: 0.03
+  cloud_thr: 0.7
+  clearness_thr: 0.8
+  window: 14
+  min_violations: 2
+
+fusion:
+  mode: rules         # rules | lr
+  slope: 4.0
+
+policy:
+  accept: 0.8
+  deweight: 0.5
+  verify: 0.2
+  hold_days: 3
+
+eval:
+  n_seeds: 20
+  attack_window: ["02-01", "09-30"]
+  warmup_days: 365
