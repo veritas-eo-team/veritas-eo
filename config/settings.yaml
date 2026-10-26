@@ -48,7 +48,7 @@ replay:
   m: 7                # window length in days
   decimals: 2         # rounding before exact matching (POWER reports 2 decimals)
   near_thr: 0.9       # placeholder: near-copy similarity threshold
-  disagree_thr: 1.0   # placeholder: rolling mean |z| needed to count a near copy
+  disagree_thr: 2.0   # placeholder: rolling mean |z| needed to count a near copy
   stuck_run: 5        # identical values in a row that count as stuck
   min_window_std: 0.05  # placeholder: skip near-constant windows (target units)
 
