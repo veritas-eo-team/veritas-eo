@@ -6,6 +6,7 @@ import pandas as pd
 import pytest
 
 import src.detect.context_model as cm
+from src.common import EPS
 from src.synthetic import make_synthetic_frame
 
 CONTEXT_VARS = ["CLRSKY_SFC_SW_DWN", "T2M", "RH2M", "PRECTOTCORR", "GWETTOP"]
@@ -146,3 +147,44 @@ def test_context_model_beats_climatology(frames):
     clim = np.concatenate([base.predict(df).loc[years, "gap"].to_numpy() for df in frames])
     rmse = lambda x: np.sqrt(np.nanmean(x ** 2))
     assert rmse(ctx) < 0.7 * rmse(clim)
+
+
+
+def _gap_frame(n: int = 900, bias: float = 0.05, step_at: int | None = None) -> pd.DataFrame:
+    rng = np.random.default_rng(0)
+    index = pd.date_range("2020-01-01", periods=n, freq="D", name="date")
+    gap = bias + rng.normal(0.0, 0.05, n)
+    if step_at is not None:
+        gap[step_at:] += 0.113
+    sigma = np.full(n, 0.05)
+    return pd.DataFrame({"expected": np.full(n, 5.0), "sigma": sigma, "gap": gap, "z": gap / sigma},
+                        index=index)
+
+
+def test_calibration_removes_site_offset():
+    cal = cm.calibrate_site(_gap_frame())
+    assert cal["gap"].iloc[:30].isna().all()             # not enough reference days yet
+    assert abs(cal["gap"].iloc[365:].mean()) < 0.01
+    assert cal.attrs["site_offset"] == pytest.approx(0.05, abs=0.01)
+    assert 0.8 < cal["z"].iloc[365:].std() < 1.2
+
+
+def test_calibration_keeps_a_later_step():
+    cal = cm.calibrate_site(_gap_frame(step_at=500))
+    assert cal["gap"].iloc[500:].mean() == pytest.approx(0.113, abs=0.01)
+
+
+def test_calibration_is_causal():
+    out = _gap_frame()
+    full = cm.calibrate_site(out)
+    for t in (10, 200, 400, 800):
+        pd.testing.assert_frame_equal(cm.calibrate_site(out.iloc[:t]), full.iloc[:t], check_freq=False)
+
+
+def test_calibrated_output_keeps_c3_identities(fitted, frames):
+    df = frames[3]
+    cal = cm.calibrate_site(fitted.predict(df))
+    ok = cal["gap"].notna()
+    lhs = np.log(df["target"][ok] + EPS) - np.log(cal["expected"][ok] + EPS)
+    np.testing.assert_allclose(cal["gap"][ok], lhs, atol=1e-9)
+    np.testing.assert_allclose(cal["z"][ok], cal["gap"][ok] / cal["sigma"][ok])

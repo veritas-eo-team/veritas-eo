@@ -76,7 +76,7 @@ def make_synthetic_frame(
         raise ValueError("the date range must cover at least 2 days")
 
     rng = np.random.default_rng([int(seed), zlib.crc32(location.encode("utf-8"))])
-    doy = index.dayofyear.to_numpy(dtype=float)
+    doy = index.day_of_year.to_numpy(dtype=float)
 
     # Site climate (varies by location and seed).
     clr_base = rng.uniform(6.0, 7.5)

@@ -95,7 +95,7 @@ def build_features(df: pd.DataFrame, context_vars: Sequence[str]) -> pd.DataFram
         values = df[col].to_numpy(dtype=float) if col in df else nan.copy()
         feats[col] = np.log1p(np.clip(values, 0.0, None)) if var in LOG1P_VARS else values
 
-    doy = df.index.dayofyear.to_numpy(dtype=float)
+    doy = df.index.day_of_year.to_numpy(dtype=float)
     angle = 2.0 * np.pi * (doy - 1.0) / 365.25
     feats["doy_sin"] = np.sin(angle)
     feats["doy_cos"] = np.cos(angle)
@@ -311,6 +311,60 @@ class ContextModel:
         return model
 
 
+# ------------------------------------------------------------------ site calibration
+
+DEFAULT_REF_DAYS = 365
+DEFAULT_MIN_REF_DAYS = 30
+SCALE_CLIP = (0.5, 2.0)
+
+
+def calibrate_site(
+    out: pd.DataFrame,
+    ref_days: int = DEFAULT_REF_DAYS,
+    min_ref_days: int = DEFAULT_MIN_REF_DAYS,
+) -> pd.DataFrame:
+    """Causal per-site calibration of predict() output against a reference period.
+
+    The context model is shared by all locations, so each site keeps a small
+    constant offset and its own noise level. Day t is corrected with the median
+    gap and the robust spread of z over the reference days before t: the first
+    `ref_days` days of the series, frozen after that. Days with fewer than
+    `min_ref_days` valid reference days get NaN. Assumes the reference period is
+    clean (a site-onboarding period). The C3 identities still hold:
+    gap = log(target + EPS) - log(expected + EPS) and z = gap / sigma.
+    """
+    n = len(out)
+    gap = out["gap"].to_numpy(dtype=float)
+    sigma = out["sigma"].to_numpy(dtype=float)
+    expected = out["expected"].to_numpy(dtype=float)
+    m = min(int(ref_days), n)
+
+    def reference_stats(upto: int) -> tuple[float, float]:
+        g, s = gap[:upto], sigma[:upto]
+        ok = ~np.isnan(g)
+        if ok.sum() < min_ref_days:
+            return np.nan, np.nan
+        med = float(np.median(g[ok]))
+        zc = (g[ok] - med) / s[ok]
+        spread = 1.4826 * float(np.median(np.abs(zc - np.median(zc))))
+        return med, float(np.clip(spread, *SCALE_CLIP))
+
+    offset = np.full(n, np.nan)
+    scale = np.full(n, np.nan)
+    for t in range(m):                      # day t uses reference days before t
+        offset[t], scale[t] = reference_stats(t)
+    if n > m:
+        offset[m:], scale[m:] = reference_stats(m)
+
+    cal = out.copy()
+    cal["expected"] = (expected + EPS) * np.exp(offset) - EPS
+    cal["sigma"] = sigma * scale
+    cal["gap"] = gap - offset
+    cal["z"] = cal["gap"] / cal["sigma"]
+    cal.attrs = dict(out.attrs)
+    cal.attrs["site_offset"] = float(offset[-1]) if n else float("nan")
+    cal.attrs["site_scale"] = float(scale[-1]) if n else float("nan")
+    return cal
 # ------------------------------------------------------------------ baseline
 
 def _climatology_log(df: pd.DataFrame, window: int) -> np.ndarray:
@@ -320,7 +374,7 @@ def _climatology_log(df: pd.DataFrame, window: int) -> np.ndarray:
         return np.empty(0)
     target = df["target"].to_numpy(dtype=float) if "target" in df else np.full(n, np.nan)
     years = df.index.year.to_numpy()
-    doy = np.minimum(df.index.dayofyear.to_numpy(), 365) - 1
+    doy = np.minimum(df.index.day_of_year.to_numpy(), 365) - 1
     uniq, yi = np.unique(years, return_inverse=True)
     grid = np.full((len(uniq), 365), np.nan)
     grid[yi, doy] = _log_pos(target)
@@ -424,34 +478,39 @@ def train_cli() -> int:
     ty = model.test_year
 
     print(f"{'location':<14}{'OOF rmse':>9}{'z mean':>8}{'z std':>7}{'clim rmse':>10}"
-          f"   {ty} rmse{'z mean':>8}{'z std':>7}")
-    pooled: dict[str, list[np.ndarray]] = {"oof_gap": [], "oof_z": [], "clim": [], "ty_gap": [], "ty_z": []}
+          f"{f'{ty} rmse':>10}{'z mean':>8}{'z std':>7}{'cal mean':>9}{'cal std':>8}{'offset':>8}")
+    pooled: dict[str, list[np.ndarray]] = {k: [] for k in ("oof_gap", "oof_z", "clim", "ty_gap", "ty_z", "cal_z")}
     for location_id, df, o in zip(ids, frames, oof):
         before = df.index.year < ty
         in_ty = df.index.year == ty
         full = model.predict(df)
         clim = base.predict(df)
+        cal = calibrate_site(model.predict(df.loc[f"{ty - 1}-01-01":]))
         parts = {
             "oof_gap": o["gap"].to_numpy()[before], "oof_z": o["z"].to_numpy()[before],
             "clim": clim["gap"].to_numpy()[before],
             "ty_gap": full["gap"].to_numpy()[in_ty], "ty_z": full["z"].to_numpy()[in_ty],
+            "cal_z": cal["z"].to_numpy()[cal.index.year == ty],
         }
         for key, value in parts.items():
             pooled[key].append(value)
         zm, zs = _zstats(parts["oof_z"])
         tm, ts = _zstats(parts["ty_z"])
+        cmean, cstd = _zstats(parts["cal_z"])
         print(f"{location_id:<14}{_rmse(parts['oof_gap']):>9.3f}{zm:>8.2f}{zs:>7.2f}{_rmse(parts['clim']):>10.3f}"
-              f"{_rmse(parts['ty_gap']):>12.3f}{tm:>8.2f}{ts:>7.2f}")
+              f"{_rmse(parts['ty_gap']):>10.3f}{tm:>8.2f}{ts:>7.2f}{cmean:>9.2f}{cstd:>8.2f}"
+              f"{cal.attrs['site_offset']:>8.3f}")
     p = {key: np.concatenate(value) for key, value in pooled.items()}
     zm, zs = _zstats(p["oof_z"])
     tm, ts = _zstats(p["ty_z"])
+    cmean, cstd = _zstats(p["cal_z"])
     print(f"{'ALL':<14}{_rmse(p['oof_gap']):>9.3f}{zm:>8.2f}{zs:>7.2f}{_rmse(p['clim']):>10.3f}"
-          f"{_rmse(p['ty_gap']):>12.3f}{tm:>8.2f}{ts:>7.2f}")
+          f"{_rmse(p['ty_gap']):>10.3f}{tm:>8.2f}{ts:>7.2f}{cmean:>9.2f}{cstd:>8.2f}")
     print(f"saved models/{path.name}; rows {model.fit_info_['n_rows']}, "
           f"locations {model.fit_info_['n_locations']}, c = {model.c_:.3f}")
-    print("gap is in log units: a 12% step adds 0.113 to the gap")
+    print(f"cal = {ty} after per-site calibration on {ty - 1} (calibrate_site); "
+          "gap is in log units, a 12% step adds 0.113")
     return 0
-
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Context model (expected value of the target).")
