@@ -42,6 +42,7 @@ CONSISTENCY_LOOKBACK = 60
 RECLASSIFY_EVERY = 7
 DAILY_SHAPE_DAYS = 14
 MAX_SHAPE_DAYS = 180
+LABEL_LEVEL = 0.75  # step/drift/consistency scores this close to an alarm already set the type
 FUSION_MODEL_NAME = "fusion.joblib"
 
 
@@ -122,7 +123,7 @@ def attack_types(det: pd.DataFrame, scores: pd.DataFrame | None = None) -> np.nd
     labels = np.full(n, "none", dtype=object)
     stuck = _flag(det, "stuck")
     exact = _flag(det, "replay_exact")
-    alarm = {c: scores[c].to_numpy() >= 1.0 for c in SCORE_COLUMNS}
+    alarm = {c: scores[c].to_numpy() >= (1.0 if c == "replay_score" else LABEL_LEVEL) for c in SCORE_COLUMNS}
     step_est = _dates(det, "step_est_start")
     drift_est = _dates(det, "drift_est_start")
     gap = det["gap"].astype(float) if "gap" in det else None
