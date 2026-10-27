@@ -13,6 +13,10 @@ consistency:
   clearsky_tol: 0.0
   min_violations: 2
   cloud_min_violations: 6
+fusion:
+  shape_penalty: 0.005
+  shape_min_ramp: 5
+  shape_lookback: 90
 tuning:
   train_locations:
   - ames
@@ -50,5 +54,17 @@ tuning:
     catch_step: 1.0
     catch_drift: 1.0
     catch_replay: 1.0
+  shape_labels:
+    cases: 200
+    chosen_accuracy:
+      drift_30d: 0.56
+      drift_alarm: 0.14
+      step_30d: 0.86
+      step_alarm: 0.7
+    default_accuracy:
+      drift_30d: 0.3
+      drift_alarm: 0.04
+      step_30d: 0.98
+      step_alarm: 0.88
   fusion_brier_rules: 0.0097
   fusion_brier_lr_location_oof: 0.0076
