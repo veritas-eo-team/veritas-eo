@@ -26,8 +26,8 @@ locations only (`results/summary.md` has the full tables):
 |---|---|---|---|---|---|
 | Step +12% | 100% | 2 days | 0.40 | 0.93 | 0.99 |
 | Drift to +15% over 60 days | 100% | 10 days | 0.40 | 0.92 | 0.96 |
-| 7-day replay | 100% | 4.5 days | 0.71 | 0.33 | 0.87 |
-| Adaptive step (0.9 x detection limit) | 100% | 4.5 days | 0.41 | 0.77 | 0.87 |
+| 7-day replay | 100% | 4.5 days | 0.71 | 0.33 | 0.86 |
+| Adaptive step (0.9 x detection limit) | 100% | 4.5 days | 0.41 | 0.77 | 0.85 |
 
 Cost: about 0.3-0.6 ms per location-day and under 5 MB of peak memory on a laptop.
 
@@ -85,10 +85,12 @@ Web app (Phase 2): `streamlit run app/app.py`
   `catch_vs_size.png`, `delay_vs_drift_duration.png`, `false_alarms_vs_threshold.png`, `reliability.png`
 - `data/provenance/log.jsonl`: signed hash-chained record of every download and derived file
 
+
 ## Tested on
 
-See `results/system_info.json` (CPU, cores, RAM, OS, Python) written by the benchmark.
-<!-- fill in: CPU / cores / RAM / OS from results/system_info.json -->
+Intel x86-64 laptop CPU (8 physical / 12 logical cores), 31.7 GB RAM, Windows (build 10.0.22621),
+Python 3.11.18, NumPy 2.4.6, pandas 3.1.0; no GPU. Details in `results/system_info.json`.
+
 
 ## Sentinel-2 credentials (optional)
 

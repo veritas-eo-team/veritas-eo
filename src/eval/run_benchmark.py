@@ -221,11 +221,14 @@ def write_summary(path: Path, table: pd.DataFrame, records: pd.DataFrame, settin
     sweep = records[records["family"].str.startswith("sweep") & (records["group"] == main_group)]
     if not sweep.empty:
         step = sweep[sweep["family"] == "sweep_step"].groupby("size")["caught"].apply(lambda s: s.astype(float).mean())
-        lines += ["## Step size sweep (catch rate)", "",
-                  md_table(step.reset_index().rename(columns={"caught": "catch_rate"})), ""]
+        step_tab = step.reset_index().rename(columns={"caught": "catch_rate"})
+        step_tab["size"] = step_tab["size"].map(lambda v: f"{v:+.0%}")
+        lines += ["## Step size sweep (catch rate)", "", md_table(step_tab), ""]
         drift = sweep[(sweep["family"] == "sweep_drift") & (sweep["caught"] == True)]  # noqa: E712
         if not drift.empty:
             tab = drift.groupby(["size", "duration"])["delay_days"].median().reset_index()
+            tab["size"] = tab["size"].map(lambda v: f"{v:.0%}")
+            tab["duration"] = tab["duration"].astype(int)
             lines += ["## Drift sweep (median delay of caught drifts, days)", "", md_table(tab, 1), ""]
         rep = sweep[sweep["family"] == "sweep_replay"].groupby(["duration", "noise"])["caught"].apply(
             lambda s: s.astype(float).mean()).reset_index().rename(columns={"caught": "catch_rate"})
