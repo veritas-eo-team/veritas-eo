@@ -5,8 +5,6 @@ keys/*private*
 
 # large or regenerable data
 data/raw/
-data/clean/
-models/
 
 # python and tooling
 __pycache__/
