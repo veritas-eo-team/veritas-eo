@@ -6,14 +6,15 @@ python -m src.eval.tune [--quick] [--seeds N]
 2. Out-of-fold context-model predictions (ContextModel.oof_predict, GroupKFold by
    location), calibrated per site with calibrate_site; only years before test_year.
 3. phi = pooled lag-1 autocorrelation of the calibrated z after the reference year.
-4. consistency.clearsky_tol = smallest tolerance broken on <= 0.2% of clean days.
+4. consistency.clearsky_tol = smallest tolerance broken on <= 0.2% of clean days; the
+   natural Sentinel-2 cloud-conflict rate is measured and recorded.
 5. k = half the prewhitened z-shift of a 12% step. Grid search of step h, drift L and
-   t_thr, replay near_thr and consistency min_violations: each detector gets a share of
-   a 1-per-location-year false-alarm budget (measured on the clean out-of-fold years) and
-   keeps the value with the best catch rate on the standard attacks injected into the
-   same series (then lower false alarms, then lower delay). The whole system (fusion +
-   policy) is then checked and the budgets shrink until it stays <= 1 false-alarm
-   episode per location-year.
+   t_thr, replay near_thr, and the clear-sky and cloud min_violations: each detector gets
+   a share of a 1-per-location-year false-alarm budget (clean out-of-fold years) and keeps
+   the value with the best catch rate on the standard attacks injected into the same
+   series (then fewer false alarms, then lower delay). The whole system (fusion + policy)
+   is then checked and the budgets shrink until it stays <= 1 false-alarm episode per
+   location-year.
 6. Fits the logistic-regression fusion on the same series, saves models/fusion.joblib,
    and compares its location-out-of-fold Brier score with the rules fusion.
 7. Writes config/tuned.yaml and prints a before/after table ("before" = settings.yaml
@@ -39,7 +40,7 @@ from src.attacks.inject import inject
 from src.common import EPS, PATHS, get_logger, load_config
 from src.detect import consistency, drift, replay, step
 from src.detect.context_model import DEFAULT_MIN_REF_DAYS, DEFAULT_REF_DAYS, ContextModel, calibrate_site
-from src.detect.fusion import DEFAULT_SLOPE, FEATURE_COLUMNS, fit_fusion, fusion_features, rules_probability, save_fusion
+from src.detect.fusion import DEFAULT_SLOPE, fit_fusion, fusion_features, rules_probability, save_fusion
 from src.eval.metrics import ALARM_ACTIONS, attack_windows, fa_per_location_year, rising_edges
 from src.eval.scenarios import STANDARD, eval_settings
 from src.respond.policy import decide
@@ -52,10 +53,11 @@ FULL_GRIDS: dict[str, tuple] = {
     "drift_t": (3.0, 4.0, 5.0, 6.0, 8.0),
     "replay_near": (0.7, 0.75, 0.8, 0.85, 0.9, 0.95),
     "cons_minv": (1, 2, 3, 4),
+    "cons_cloud_minv": (2, 3, 4, 6, 8),
 }
 QUICK_GRIDS: dict[str, tuple] = {
     "step_h": (6.0, 10.0), "drift_L": (4.0, 5.0), "drift_t": (4.0, 6.0),
-    "replay_near": (0.8, 0.9), "cons_minv": (2, 3),
+    "replay_near": (0.8, 0.9), "cons_minv": (2, 3), "cons_cloud_minv": (2, 4),
 }
 DEFAULT_BUDGETS: dict[str, float] = {"step": 0.3, "drift": 0.3, "replay": 0.2, "consistency": 0.2}
 CATCH_ATTACKS: dict[str, set[str]] = {
@@ -193,11 +195,6 @@ def _replay_score(c: Mapping[str, np.ndarray], near_thr: float, disagree_thr: fl
     return score
 
 
-def _consistency_score(violation: np.ndarray, window: int, min_violations: int) -> np.ndarray:
-    count = pd.Series(violation.astype(float)).rolling(int(window), min_periods=1).sum().to_numpy()
-    return count / float(min_violations)
-
-
 class _Cache:
     """Per-series detector pieces, computed once and reused across the grid."""
 
@@ -206,7 +203,7 @@ class _Cache:
         self._step: dict[tuple, np.ndarray] = {}
         self._drift: dict[tuple, dict] = {}
         self._replay: dict[tuple, dict] = {}
-        self._viol: dict[tuple, np.ndarray] = {}
+        self._viol: dict[tuple, tuple[np.ndarray, np.ndarray]] = {}
 
     def step_score(self, i: int, p: Mapping[str, Any]) -> np.ndarray:
         key = (i, p["phi"], p["k"], p["h"], p["cap"])
@@ -227,15 +224,15 @@ class _Cache:
             self._replay[key] = _replay_components(self.series[i], p)
         return self._replay[key]
 
-    def violation(self, i: int, p: Mapping[str, Any]) -> np.ndarray:
+    def violation(self, i: int, p: Mapping[str, Any]) -> tuple[np.ndarray, np.ndarray]:
         key = (i, p["clearsky_tol"], p["cloud_thr"], p["clearness_thr"])
         if key not in self._viol:
-            over, conflict = consistency.violations(self.series[i].df, p["clearsky_tol"], p["cloud_thr"], p["clearness_thr"])
-            self._viol[key] = over | conflict
+            self._viol[key] = consistency.violations(self.series[i].df, p["clearsky_tol"],
+                                                     p["cloud_thr"], p["clearness_thr"])
         return self._viol[key]
 
-    # scores for every series under the full parameter set P
     def scores(self, det: str, P: Mapping[str, Mapping[str, Any]]) -> list[np.ndarray]:
+        """Scores for every series under the full parameter set P."""
         out = []
         for i in range(len(self.series)):
             if det == "step":
@@ -248,7 +245,8 @@ class _Cache:
                 out.append(_replay_score(self.replay_comp(i, r), r["near_thr"], r["disagree_thr"]))
             else:
                 c = P["consistency"]
-                out.append(_consistency_score(self.violation(i, c), c["window"], c["min_violations"]))
+                over, conflict = self.violation(i, c)
+                out.append(consistency.score_from(over, conflict, c))
         return out
 
 
@@ -303,7 +301,8 @@ def system_eval(cache: _Cache, P: Mapping[str, Mapping[str, Any]], cfg: Mapping[
         det = pd.DataFrame({"step_score": s_step[i], "drift_score": s_drift[i],
                             "replay_score": s_rep[i], "consistency_score": s_cons[i]}, index=s.df.index)
         forced = comp["exact"] | comp["stuck"]
-        p = np.where(forced, np.maximum(rules_probability(det, slope), 0.99), rules_probability(det, slope))
+        p_rules = rules_probability(det, slope)
+        p = np.where(forced, np.maximum(p_rules, 0.99), p_rules)
         decided = decide(pd.DataFrame({"p_compromise": p, "forced": forced}, index=s.df.index), cfg)
         alarms.append(decided["action"].isin(ALARM_ACTIONS).to_numpy())
         probs.append(p)
@@ -357,7 +356,7 @@ def _f(x: Any) -> float:
 def tune(frames: Sequence[pd.DataFrame], cfg: Mapping[str, Any], *, seeds: int = 1, quick: bool = False,
          out_path: Path | str | None = None, models_dir: Path | str | None = None,
          write: bool = True) -> dict[str, Any]:
-    """Run the tuning procedure; returns {params, table, path, lr, budgets}."""
+    """Run the tuning procedure; returns {params, table, path, lr, budgets, cloud}."""
     check_train_only(frames)
     settings = eval_settings(cfg)
     ty = settings["test_year"]
@@ -379,6 +378,8 @@ def tune(frames: Sequence[pd.DataFrame], cfg: Mapping[str, Any], *, seeds: int =
     shift = math.log(1.12) / float(np.nanmedian(sigma))
     k = float(np.clip(0.5 * shift * (1.0 - phi) / math.sqrt(1.0 - phi * phi), 0.25, 1.5))
     tol = consistency.choose_clearsky_tol([s.df for s in clean], MAX_EXCEED_RATE)
+    cloud = consistency.cloud_conflict_rate([s.df for s in clean], base["consistency"]["cloud_thr"],
+                                            base["consistency"]["clearness_thr"])
     start = _with(_with(_with(base, "step", phi=phi, k=k), "drift", phi=phi), "consistency", clearsky_tol=tol)
 
     def candidates(det: str, grid: Sequence[Any], setter) -> list[dict[str, Any]]:
@@ -394,8 +395,10 @@ def tune(frames: Sequence[pd.DataFrame], cfg: Mapping[str, Any], *, seeds: int =
         "drift": candidates("drift", [(L, t) for L in grids["drift_L"] for t in grids["drift_t"]],
                             lambda v: _with(start, "drift", L=v[0], t_thr=v[1])),
         "replay": candidates("replay", grids["replay_near"], lambda n: _with(start, "replay", near_thr=n)),
-        "consistency": candidates("consistency", grids["cons_minv"],
-                                  lambda m: _with(start, "consistency", min_violations=m)),
+        "consistency": candidates("consistency",
+                                  [(a, b) for a in grids["cons_minv"] for b in grids["cons_cloud_minv"]],
+                                  lambda v: _with(start, "consistency", min_violations=v[0],
+                                                  cloud_min_violations=v[1])),
     }
 
     budgets = dict(DEFAULT_BUDGETS)
@@ -404,7 +407,8 @@ def tune(frames: Sequence[pd.DataFrame], cfg: Mapping[str, Any], *, seeds: int =
         tuned = _with(start, "step", h=pick["step"]["value"])
         tuned = _with(tuned, "drift", L=pick["drift"]["value"][0], t_thr=pick["drift"]["value"][1])
         tuned = _with(tuned, "replay", near_thr=pick["replay"]["value"])
-        tuned = _with(tuned, "consistency", min_violations=pick["consistency"]["value"])
+        tuned = _with(tuned, "consistency", min_violations=pick["consistency"]["value"][0],
+                      cloud_min_violations=pick["consistency"]["value"][1])
         after = system_eval(cache, tuned, cfg)
         if after["fa"] <= SYSTEM_FA_TARGET:
             break
@@ -426,7 +430,9 @@ def tune(frames: Sequence[pd.DataFrame], cfg: Mapping[str, Any], *, seeds: int =
         "step": {"phi": _f(phi), "k": _f(k), "h": _f(tuned["step"]["h"])},
         "drift": {"phi": _f(phi), "L": _f(tuned["drift"]["L"]), "t_thr": _f(tuned["drift"]["t_thr"])},
         "replay": {"near_thr": _f(tuned["replay"]["near_thr"])},
-        "consistency": {"clearsky_tol": _f(tol), "min_violations": int(tuned["consistency"]["min_violations"])},
+        "consistency": {"clearsky_tol": _f(tol),
+                        "min_violations": int(tuned["consistency"]["min_violations"]),
+                        "cloud_min_violations": int(tuned["consistency"]["cloud_min_violations"])},
     }
     record = {
         **params,
@@ -437,6 +443,9 @@ def tune(frames: Sequence[pd.DataFrame], cfg: Mapping[str, Any], *, seeds: int =
             "attacked_series": int(len(series) - len(clean)),
             "fa_target_per_location_year": SYSTEM_FA_TARGET,
             "budgets": {d: _f(b) for d, b in budgets.items()},
+            "cloud_conflict_clean": {"cloudy_days": int(cloud["cloudy_days"]),
+                                     "conflict_days": int(cloud["conflict_days"]),
+                                     "rate": _f(cloud["rate"]) if cloud["rate"] == cloud["rate"] else None},
             "system_before": {"fa_per_location_year": _f(before["fa"]),
                               **{f"catch_{a}": _f(before[f"catch_{a}"]) for a in ATTACK_NAMES}},
             "system_after": {"fa_per_location_year": _f(after["fa"]),
@@ -451,7 +460,7 @@ def tune(frames: Sequence[pd.DataFrame], cfg: Mapping[str, Any], *, seeds: int =
         with open(path, "w", encoding="utf-8") as fh:
             fh.write("# written by: python -m src.eval.tune (train locations only, years before test_year)\n")
             yaml.safe_dump(record, fh, sort_keys=False)
-    return {"params": params, "table": table, "path": path, "lr": lr, "budgets": budgets}
+    return {"params": params, "table": table, "path": path, "lr": lr, "budgets": budgets, "cloud": cloud}
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -468,6 +477,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     res = tune(frames, cfg, seeds=args.seeds, quick=args.quick)
     print(res["table"].to_string(index=False, float_format=lambda v: f"{v:.3f}"))
     print(f"tuned: {res['params']}")
+    c = res["cloud"]
+    print(f"clean cloud conflicts: {c['conflict_days']} of {c['cloudy_days']} heavy-cloud Sentinel-2 days "
+          f"({c['rate']:.1%}) look clear in NASA POWER")
     print(f"fusion Brier: rules {res['lr']['brier_rules']:.4f}, LR (location out-of-fold) {res['lr']['brier_lr_oof']:.4f}")
     print(f"wrote config/{res['path'].name} and models/{res['lr']['path'].name}")
     return 0

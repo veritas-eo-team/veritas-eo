@@ -1,4 +1,4 @@
-"""Tests for src/detect/consistency.py (offline, synthetic data)."""
+﻿"""Tests for src/detect/consistency.py (offline, synthetic data)."""
 from __future__ import annotations
 
 import numpy as np
@@ -45,7 +45,7 @@ def test_clean_data_stays_quiet():
 
 def test_step_raises_over_clearsky_alarms():
     df = stepped(clear_frame())
-    out = cons.detect(df)
+    out = cons.detect(df, params={"cloud_min_violations": 2})
     assert not out["alarm"].iloc[:365].any()
     assert out["alarm"].iloc[365:379].any()
     assert out["over_clearsky"].iloc[365:].mean() > 0.2
@@ -61,7 +61,7 @@ def test_cloud_conflict():
         df.iloc[d, c_col] = 0.9
     df.iloc[200, t_col] = round(0.3 * clr[200], 2)  # dark under heavy cloud: consistent
     df.iloc[200, c_col] = 0.9
-    out = cons.detect(df)
+    out = cons.detect(df, params={"cloud_min_violations": 2})
     assert out["cloud_conflict"].iloc[[100, 105]].all()
     assert not out["cloud_conflict"].iloc[200]
     assert not out["alarm"].iloc[100] and out["alarm"].iloc[105]
@@ -70,7 +70,7 @@ def test_cloud_conflict():
 
 def test_missing_columns_give_zero_score():
     for df in (clear_frame()[["target"]], clear_frame().drop(columns=["cloud"])):
-        out = cons.detect(df)
+        out = cons.detect(df, params={"cloud_min_violations": 2})
         assert (out["score"] == 0).all() and not out["alarm"].any()
     nan_clr = stepped(clear_frame())
     nan_clr[CLR] = np.nan

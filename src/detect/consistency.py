@@ -6,10 +6,14 @@ over_clearsky:  target > ctx_CLRSKY_SFC_SW_DWN * (1 + clearsky_tol)
 cloud_conflict: on Sentinel-2 days with cloud >= cloud_thr, clearness
                 (target / clear-sky) >= clearness_thr (no sunny readings under heavy cloud)
 
-score = violations in the last `window` days / min_violations; alarm = score >= 1.
-Causal; missing columns give score 0. NASA's all-sky value can slightly exceed clear-sky
-naturally, so natural_exceedance_rate() measures how often clean data break each
-tolerance and tuning picks clearsky_tol from it.
+The two checks have separate thresholds: a Sentinel-2 snapshot (one ~3 km box at
+~10:30) and a NASA daily value (a ~50 km cell, whole day) disagree now and then
+naturally, so the cloud check needs more evidence than the clear-sky check.
+score = max(over-clear-sky days in the last `window` days / min_violations,
+            cloud conflicts in the last `window` days / cloud_min_violations)
+alarm = score >= 1. Causal; missing columns give score 0.
+natural_exceedance_rate() and cloud_conflict_rate() measure how often clean data
+break each check; tuning uses them.
 """
 from __future__ import annotations
 
@@ -29,6 +33,7 @@ DEFAULTS: dict[str, Any] = {
     "clearness_thr": 0.8,
     "window": 14,
     "min_violations": 2,
+    "cloud_min_violations": 4,
 }
 TOL_GRID: tuple[float, ...] = (0.0, 0.01, 0.02, 0.03, 0.04, 0.05, 0.075, 0.1, 0.15)
 
@@ -41,12 +46,12 @@ def merge_params(params: Mapping[str, Any] | None = None) -> dict[str, Any]:
     for key, value in (params or {}).items():
         if value is not None:
             merged[key] = value
-    merged["window"] = int(merged["window"])
-    merged["min_violations"] = int(merged["min_violations"])
+    for key in ("window", "min_violations", "cloud_min_violations"):
+        merged[key] = int(merged[key])
     for key in ("clearsky_tol", "cloud_thr", "clearness_thr"):
         merged[key] = float(merged[key])
-    if merged["window"] < 1 or merged["min_violations"] < 1:
-        raise ValueError("consistency.window and min_violations must be at least 1")
+    if merged["window"] < 1 or merged["min_violations"] < 1 or merged["cloud_min_violations"] < 1:
+        raise ValueError("consistency.window, min_violations and cloud_min_violations must be at least 1")
     if merged["clearsky_tol"] < 0:
         raise ValueError("consistency.clearsky_tol must be >= 0")
     if not 0.0 < merged["cloud_thr"] <= 1.0:
@@ -80,6 +85,16 @@ def violations(df: pd.DataFrame, clearsky_tol: float, cloud_thr: float, clearnes
     return over, conflict
 
 
+def _rolling_count(flags: np.ndarray, window: int) -> np.ndarray:
+    return pd.Series(flags.astype(float)).rolling(window, min_periods=1).sum().to_numpy()
+
+
+def score_from(over: np.ndarray, conflict: np.ndarray, p: Mapping[str, Any]) -> np.ndarray:
+    """max(over count / min_violations, conflict count / cloud_min_violations) over the window."""
+    return np.maximum(_rolling_count(over, p["window"]) / p["min_violations"],
+                      _rolling_count(conflict, p["window"]) / p["cloud_min_violations"])
+
+
 def detect(df: pd.DataFrame, gap: pd.Series | None = None, params: Mapping[str, Any] | None = None) -> pd.DataFrame:
     """Contract C4: DataFrame[score, alarm, over_clearsky, cloud_conflict] on df.index.
 
@@ -89,9 +104,7 @@ def detect(df: pd.DataFrame, gap: pd.Series | None = None, params: Mapping[str, 
     """
     p = merge_params(params)
     over, conflict = violations(df, p["clearsky_tol"], p["cloud_thr"], p["clearness_thr"])
-    bad = over | conflict
-    count = pd.Series(bad.astype(float)).rolling(p["window"], min_periods=1).sum().to_numpy()
-    score = count / p["min_violations"]
+    score = score_from(over, conflict, p)
     alarm = score >= 1.0
     out = pd.DataFrame({"score": score, "alarm": alarm, "over_clearsky": over, "cloud_conflict": conflict},
                        index=df.index)
@@ -101,6 +114,7 @@ def detect(df: pd.DataFrame, gap: pd.Series | None = None, params: Mapping[str, 
     if hits.size:
         a = int(hits[0])
         lo = max(0, a - p["window"] + 1)
+        bad = over | conflict
         first = lo + int(np.flatnonzero(bad[lo:a + 1])[0])
         est_start, first_alarm = df.index[first], df.index[a]
     out.attrs.update(est_start=est_start, first_alarm=first_alarm)
@@ -136,3 +150,16 @@ def choose_clearsky_tol(frames: Iterable[pd.DataFrame], max_rate: float = 0.005,
     rates = natural_exceedance_rate(frames, tol_grid)
     ok = rates.index[rates["rate"] <= max_rate]
     return float(ok.min()) if len(ok) else float(max(tol_grid))
+
+
+def cloud_conflict_rate(frames: Iterable[pd.DataFrame], cloud_thr: float = DEFAULTS["cloud_thr"],
+                        clearness_thr: float = DEFAULTS["clearness_thr"]) -> dict[str, float]:
+    """On clean data: share of heavy-cloud Sentinel-2 days that still look clear in NASA POWER."""
+    cloudy = conflicts = 0
+    for df in frames:
+        cloud = _column(df, "cloud")
+        _, conflict = violations(df, 0.0, cloud_thr, clearness_thr)
+        cloudy += int(np.sum(cloud >= cloud_thr))
+        conflicts += int(np.sum(conflict))
+    return {"cloudy_days": cloudy, "conflict_days": conflicts,
+            "rate": conflicts / cloudy if cloudy else float("nan")}
