@@ -1,0 +1,49 @@
+# written by: python -m src.eval.tune (train locations only, years before test_year)
+step:
+  phi: 0.1342
+  k: 1.1099
+  h: 20.0
+drift:
+  phi: 0.1342
+  L: 6.0
+  t_thr: 6.0
+replay:
+  near_thr: 0.9
+consistency:
+  clearsky_tol: 0.0
+  min_violations: 2
+tuning:
+  train_locations:
+  - ames
+  - black_forest
+  - ludhiana
+  - manaus
+  - nairobi
+  - paris
+  - phoenix
+  - seville
+  - tozeur
+  - tunis
+  years:
+  - 2019
+  - 2023
+  clean_location_years: 49.9932
+  attacked_series: 150
+  fa_target_per_location_year: 1.0
+  budgets:
+    step: 0.3
+    drift: 0.3
+    replay: 0.2
+    consistency: 0.2
+  system_before:
+    fa_per_location_year: 1.7602
+    catch_step: 1.0
+    catch_drift: 1.0
+    catch_replay: 1.0
+  system_after:
+    fa_per_location_year: 0.24
+    catch_step: 1.0
+    catch_drift: 1.0
+    catch_replay: 1.0
+  fusion_brier_rules: 0.0096
+  fusion_brier_lr_location_oof: 0.0059
