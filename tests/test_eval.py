@@ -163,3 +163,15 @@ def test_quick_benchmark_on_synthetic(model, tmp_path):
     assert table.loc[table["attack"] == "none", "fa_per_location_year"].notna().all()
     summary = res["paths"]["summary.md"].read_text(encoding="utf-8")
     assert "Standard scenario" in summary and "Unseen year" in summary
+
+
+
+def test_type_scored_again_after_30_days():
+    df = c5_frame()
+    put(df, "action", 200, 240, "quarantine")
+    put(df, "attack_type", 200, 210, "step")      # early in the ramp it looks like a step
+    put(df, "attack_type", 210, 240, "drift")     # later the fit recognises the ramp
+    put(df, "drift_score", 199, 240, 1.2)
+    ev = metrics.event_metrics(df, labels_for(df, 195, 365, "drift"), 2024)
+    assert ev["type_at_alarm"] == "step" and ev["type_correct"] is False
+    assert ev["type_30d"] == "drift" and ev["type_30d_correct"] is True

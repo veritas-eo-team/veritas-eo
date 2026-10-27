@@ -221,14 +221,11 @@ def write_summary(path: Path, table: pd.DataFrame, records: pd.DataFrame, settin
     sweep = records[records["family"].str.startswith("sweep") & (records["group"] == main_group)]
     if not sweep.empty:
         step = sweep[sweep["family"] == "sweep_step"].groupby("size")["caught"].apply(lambda s: s.astype(float).mean())
-        step_tab = step.reset_index().rename(columns={"caught": "catch_rate"})
-        step_tab["size"] = step_tab["size"].map(lambda v: f"{v:+.0%}")
-        lines += ["## Step size sweep (catch rate)", "", md_table(step_tab), ""]
+        lines += ["## Step size sweep (catch rate)", "",
+                  md_table(step.reset_index().rename(columns={"caught": "catch_rate"})), ""]
         drift = sweep[(sweep["family"] == "sweep_drift") & (sweep["caught"] == True)]  # noqa: E712
         if not drift.empty:
             tab = drift.groupby(["size", "duration"])["delay_days"].median().reset_index()
-            tab["size"] = tab["size"].map(lambda v: f"{v:.0%}")
-            tab["duration"] = tab["duration"].astype(int)
             lines += ["## Drift sweep (median delay of caught drifts, days)", "", md_table(tab, 1), ""]
         rep = sweep[sweep["family"] == "sweep_replay"].groupby(["duration", "noise"])["caught"].apply(
             lambda s: s.astype(float).mean()).reset_index().rename(columns={"caught": "catch_rate"})
@@ -336,7 +333,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     res = run(cfg, model, test_frames, train_frames, n_seeds=n_seeds, sweep=args.sweep,
               quick=args.quick, split=args.split)
     cols = ["group", "attack", "n_scenarios", "catch_rate", "median_delay_days",
-            "fa_per_location_year", "f1", "roc_auc"]
+            "attribution_acc", "attribution_acc_30d", "fa_per_location_year", "f1", "roc_auc"]
     print(res["table"][cols].to_string(index=False, float_format=lambda v: f"{v:.3f}"))
     print(f"done in {time.perf_counter() - t0:.0f} s; files in results/: "
           + ", ".join(p.name for p in res["paths"].values()))

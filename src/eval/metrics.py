@@ -23,6 +23,7 @@ from sklearn.metrics import roc_auc_score
 
 ALARM_ACTIONS: tuple[str, ...] = ("verify", "quarantine")
 GRACE_DAYS = 30
+SETTLE_DAYS = 30  # attack type is also scored this many days after the first alarm
 DAYS_PER_YEAR = 365.25
 DETECTOR_ORDER: tuple[str, ...] = ("replay", "step", "drift", "consistency")
 EXPECTED_TYPE: dict[str, str] = {"step": "step", "drift": "drift", "replay": "replay", "stuck": "stuck"}
@@ -67,6 +68,7 @@ def event_metrics(result: pd.DataFrame, labels: Mapping[str, Any], test_year: in
         "fa_days": int(np.sum(clean)),
         "caught": np.nan, "delay_days": np.nan, "type_at_alarm": None, "type_correct": np.nan,
         "start_error_days": np.nan, "first_detector": None, "min_trust_attacked": np.nan,
+        "type_30d": None, "type_30d_correct": np.nan,
     }
     if labels.get("type", "none") == "none" or labels.get("start") is None:
         return rec
@@ -84,6 +86,16 @@ def event_metrics(result: pd.DataFrame, labels: Mapping[str, Any], test_year: in
     rec["type_at_alarm"] = str(r["attack_type"].iloc[a])
     expected = EXPECTED_TYPE.get(str(labels["type"]))
     rec["type_correct"] = (rec["type_at_alarm"] == expected) if expected else np.nan
+    settle = window & alarm & np.asarray(index <= first + pd.Timedelta(days=SETTLE_DAYS))
+    seen = [str(t) for t in r["attack_type"].to_numpy()[settle] if str(t) != "none"]
+    if "replay" in seen:
+        later = "replay"
+    elif "stuck" in seen:
+        later = "stuck"
+    else:
+        later = seen[-1] if seen else rec["type_at_alarm"]
+    rec["type_30d"] = later
+    rec["type_30d_correct"] = (later == expected) if expected else np.nan
     est = r["est_start"].iloc[a]
     if not pd.isna(est):
         rec["start_error_days"] = int((pd.Timestamp(est) - start).days)
@@ -146,6 +158,7 @@ def summarize(records: pd.DataFrame, perday: pd.DataFrame) -> pd.DataFrame:
             "catch_rate": float(attacked["caught"].astype(float).mean()) if len(attacked) else np.nan,
             "median_delay_days": float(caught["delay_days"].median()) if len(caught) else np.nan,
             "attribution_acc": float(caught["type_correct"].astype(float).mean()) if len(caught) else np.nan,
+            "attribution_acc_30d": float(caught["type_30d_correct"].astype(float).mean()) if len(caught) else np.nan,
             "median_abs_start_error_days": float(caught["start_error_days"].abs().median()) if len(caught) else np.nan,
             "fa_per_location_year": fa_per_location_year(recs["fa_episodes"].sum(), recs["fa_days"].sum()),
             "precision": pdm.get("precision", np.nan), "recall": pdm.get("recall", np.nan),
