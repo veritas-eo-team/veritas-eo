@@ -34,13 +34,13 @@ context_model:
   sigma_min: 0.02     # placeholder: floor on predicted std of the log gap
 
 step:
-  k: 0.25             # placeholder: CUSUM allowance in z units (tuning: half the z-shift of a 12% step)
-  h: 12.0             # placeholder: CUSUM decision limit
+  k: 0.75             # placeholder: CUSUM allowance in z units (tuning: half the z-shift of a 12% step)
+  h: 8.0             # placeholder: CUSUM decision limit
   phi: 0.3            # placeholder: AR(1) prewhitening coefficient (tuning estimates it)
 
 drift:
   lambda: 0.05        # placeholder: EWMA smoothing
-  L: 3.0              # placeholder: EWMA control-limit width
+  L: 4.0              # placeholder: EWMA control-limit width
   slope_window: 60    # placeholder: days in the rolling slope fit
   t_thr: 4.0          # placeholder: slope t-statistic threshold
 
@@ -61,7 +61,7 @@ consistency:
 
 fusion:
   mode: rules         # rules | lr
-  slope: 4.0
+  slope: 8.0
 
 policy:
   accept: 0.8

@@ -188,3 +188,17 @@ def test_calibrated_output_keeps_c3_identities(fitted, frames):
     lhs = np.log(df["target"][ok] + EPS) - np.log(cal["expected"][ok] + EPS)
     np.testing.assert_allclose(cal["gap"][ok], lhs, atol=1e-9)
     np.testing.assert_allclose(cal["z"][ok], cal["gap"][ok] / cal["sigma"][ok])
+
+
+
+def test_calibration_removes_a_seasonal_bias():
+    index = pd.date_range("2020-01-01", periods=900, freq="D", name="date")
+    season = 0.05 * np.sin(2.0 * np.pi * (index.day_of_year.to_numpy() - 1.0) / 365.25)
+    gap = season + np.random.default_rng(1).normal(0.0, 0.03, 900)
+    sigma = np.full(900, 0.03)
+    out = pd.DataFrame({"expected": np.full(900, 5.0), "sigma": sigma, "gap": gap, "z": gap / sigma},
+                       index=index)
+    cal = cm.calibrate_site(out)
+    after = cal["gap"].iloc[365:].to_numpy()
+    assert abs(np.corrcoef(after, season[365:])[0, 1]) < 0.15
+    assert after.std() < 0.04

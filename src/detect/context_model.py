@@ -42,6 +42,8 @@ MODEL_VERSION = 1
 CLRSKY_VAR = "CLRSKY_SFC_SW_DWN"
 LOG1P_VARS = frozenset({"PRECTOTCORR"})  # skewed, non-negative
 DSC_CAP = 60.0
+EXCLUDED_VARS = frozenset({"GWETTOP"})   # slow state variable: reflects past rain, not today's sky
+REF_WINDOW = 60                          # days used for calibration during the reference period
 MEDIAN_ABS_Z = 0.6744897501960817       # median |N(0, 1)|
 RESIDUAL_FLOOR = 1e-4                   # keeps log|residual| finite
 DEFAULTS: dict[str, float] = {"alpha": 1.0, "sigma_min": 0.02}
@@ -58,9 +60,9 @@ def _log_pos(x: np.ndarray) -> np.ndarray:
 
 def feature_names(context_vars: Sequence[str]) -> list[str]:
     """Fixed feature list (values, then one missing-indicator per value)."""
-    others = [f"ctx_{var}" for var in context_vars if var != CLRSKY_VAR]
+    others = [f"ctx_{var}" for var in context_vars if var != CLRSKY_VAR and var not in EXCLUDED_VARS]
     values = (["nb_log_mean", "nb_log_median", "nb_log_std", "n_neighbors", "log_clrsky"]
-              + others + ["doy_sin", "doy_cos", "ndvi", "days_since_clear_capped"])
+              + others + ["doy_sin", "doy_cos"])
     return values + [f"{name}_missing" for name in values]
 
 
@@ -89,7 +91,7 @@ def build_features(df: pd.DataFrame, context_vars: Sequence[str]) -> pd.DataFram
     feats["log_clrsky"] = _log_pos(df[clr_col].to_numpy(dtype=float)) if clr_col in df else nan.copy()
 
     for var in context_vars:
-        if var == CLRSKY_VAR:
+        if var == CLRSKY_VAR or var in EXCLUDED_VARS:
             continue
         col = f"ctx_{var}"
         values = df[col].to_numpy(dtype=float) if col in df else nan.copy()
@@ -99,10 +101,7 @@ def build_features(df: pd.DataFrame, context_vars: Sequence[str]) -> pd.DataFram
     angle = 2.0 * np.pi * (doy - 1.0) / 365.25
     feats["doy_sin"] = np.sin(angle)
     feats["doy_cos"] = np.cos(angle)
-    feats["ndvi"] = df["ndvi"].to_numpy(dtype=float) if "ndvi" in df else nan.copy()
-    dsc = df["days_since_clear"].to_numpy(dtype=float) if "days_since_clear" in df else nan.copy()
-    feats["days_since_clear_capped"] = np.minimum(dsc, DSC_CAP)
-
+    
     for name in list(feats):
         feats[f"{name}_missing"] = np.isnan(feats[name]).astype(float)
     out = pd.DataFrame(feats, index=df.index)
@@ -316,21 +315,31 @@ class ContextModel:
 DEFAULT_REF_DAYS = 365
 DEFAULT_MIN_REF_DAYS = 30
 SCALE_CLIP = (0.5, 2.0)
+SEASONAL_MIN_DAYS = 300  # valid reference days needed to fit the annual cycle
+
+
+def _harmonics(index: pd.DatetimeIndex) -> np.ndarray:
+    """Columns [1, sin, cos] of the annual cycle for each day."""
+    angle = 2.0 * np.pi * (index.day_of_year.to_numpy(dtype=float) - 1.0) / 365.25
+    return np.column_stack([np.ones(len(index)), np.sin(angle), np.cos(angle)])
 
 
 def calibrate_site(
     out: pd.DataFrame,
     ref_days: int = DEFAULT_REF_DAYS,
     min_ref_days: int = DEFAULT_MIN_REF_DAYS,
+    seasonal: bool = True,
 ) -> pd.DataFrame:
     """Causal per-site calibration of predict() output against a reference period.
 
-    The context model is shared by all locations, so each site keeps a small
-    constant offset and its own noise level. Day t is corrected with the median
-    gap and the robust spread of z over the reference days before t: the first
-    `ref_days` days of the series, frozen after that. Days with fewer than
-    `min_ref_days` valid reference days get NaN. Assumes the reference period is
-    clean (a site-onboarding period). The C3 identities still hold:
+    The context model is shared by all locations, so each site keeps its own bias
+    (often seasonal) and noise level. During the first `ref_days` days, day t is
+    corrected with the median gap and robust z spread of the days before t. After the
+    reference period the correction is frozen: an annual cycle (offset + sine + cosine)
+    fitted to the reference gaps (constant median if seasonal=False or fewer than
+    SEASONAL_MIN_DAYS valid days), and the robust spread of what remains. Days with
+    fewer than `min_ref_days` valid reference days get NaN. Assumes the reference
+    period is clean. The C3 identities still hold:
     gap = log(target + EPS) - log(expected + EPS) and z = gap / sigma.
     """
     n = len(out)
@@ -339,22 +348,32 @@ def calibrate_site(
     expected = out["expected"].to_numpy(dtype=float)
     m = min(int(ref_days), n)
 
-    def reference_stats(upto: int) -> tuple[float, float]:
-        g, s = gap[:upto], sigma[:upto]
+    def spread_of(zc: np.ndarray) -> float:
+        value = 1.4826 * float(np.median(np.abs(zc - np.median(zc))))
+        return float(np.clip(value, *SCALE_CLIP))
+
+    def reference_stats(lo: int, upto: int) -> tuple[float, float]:
+        g, s = gap[lo:upto], sigma[lo:upto]
         ok = ~np.isnan(g)
         if ok.sum() < min_ref_days:
             return np.nan, np.nan
         med = float(np.median(g[ok]))
-        zc = (g[ok] - med) / s[ok]
-        spread = 1.4826 * float(np.median(np.abs(zc - np.median(zc))))
-        return med, float(np.clip(spread, *SCALE_CLIP))
+        return med, spread_of((g[ok] - med) / s[ok])
 
     offset = np.full(n, np.nan)
     scale = np.full(n, np.nan)
     for t in range(m):                      # day t uses reference days before t
-        offset[t], scale[t] = reference_stats(t)
+        offset[t], scale[t] = reference_stats(max(0, t - REF_WINDOW), t)
     if n > m:
-        offset[m:], scale[m:] = reference_stats(m)
+        g, s = gap[:m], sigma[:m]
+        ok = ~np.isnan(g)
+        if seasonal and ok.sum() >= SEASONAL_MIN_DAYS:
+            design = _harmonics(out.index[:m])[ok]
+            coef, *_ = np.linalg.lstsq(design, g[ok], rcond=None)
+            offset[m:] = _harmonics(out.index[m:]) @ coef
+            scale[m:] = spread_of((g[ok] - design @ coef) / s[ok])
+        else:
+            offset[m:], scale[m:] = reference_stats(0, m)
 
     cal = out.copy()
     cal["expected"] = (expected + EPS) * np.exp(offset) - EPS
