@@ -11,7 +11,8 @@ replay:
   near_thr: 0.9
 consistency:
   clearsky_tol: 0.0
-  min_violations: 4
+  min_violations: 2
+  cloud_min_violations: 6
 tuning:
   train_locations:
   - ames
@@ -35,15 +36,19 @@ tuning:
     drift: 0.3
     replay: 0.2
     consistency: 0.2
+  cloud_conflict_clean:
+    cloudy_days: 3338
+    conflict_days: 826
+    rate: 0.2475
   system_before:
-    fa_per_location_year: 5.3007
+    fa_per_location_year: 1.9003
     catch_step: 1.0
     catch_drift: 1.0
     catch_replay: 1.0
   system_after:
-    fa_per_location_year: 0.4401
+    fa_per_location_year: 0.26
     catch_step: 1.0
     catch_drift: 1.0
     catch_replay: 1.0
-  fusion_brier_rules: 0.0115
-  fusion_brier_lr_location_oof: 0.0098
+  fusion_brier_rules: 0.0097
+  fusion_brier_lr_location_oof: 0.0076
