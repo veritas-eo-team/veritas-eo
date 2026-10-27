@@ -1,8 +1,8 @@
 """Fuse the four detector scores into p_compromise and an attack type.
 
 Input `det` (one row per day): step_score, drift_score, replay_score, consistency_score,
-replay_exact, stuck, gap, step_est_start, drift_est_start (Timestamp or NaT, filled
-from each detector's first alarm onward). Missing score columns count as 0, NaN as 0.
+replay_exact, stuck, gap, step_est_start, drift_est_start (Timestamp or NaT, set while
+that detector alarms). Missing score columns count as 0, NaN as 0.
 
 rules mode: p_i = sigmoid(slope * (score_i - 1)) for the four scores;
             p = 1 - prod(1 - p_i). A score of exactly 1 (the alarm threshold) gives p_i = 0.5.
@@ -10,11 +10,12 @@ lr mode:    LogisticRegression on the four scores and their causal 7-day maxima,
             loaded from models/fusion.joblib (falls back to rules if the file is missing).
 Both modes: an exact replay or a stuck run forces p >= 0.99 (column `forced`).
 
-attack_type (causal, per day): "stuck" / "replay" if those fired; otherwise, if step or
-drift alarmed, classify_shape on the gap since the earlier of step_est_start /
-drift_est_start; if only consistency alarmed, classify_shape on the last 60 days;
-else "none". To stay fast the shape is re-fitted every 7 days of an episode (daily for
-the first 14 days) on at most 180 days after the start, and cached.
+attack_type (causal, per day): "stuck" / "replay" if those fired; otherwise, when a
+step, drift or consistency score reaches LABEL_LEVEL, the gap is fitted as a step and
+as a ramp from an anchor fixed when the alarm episode starts (the earliest detector
+start estimate, but at least `lookback` days back) and the better shape wins; else
+"none". The shape settings (penalty, minimum ramp length, lookback) come from config
+fusion.shape_penalty / shape_min_ramp / shape_lookback (tuned on train data).
 """
 from __future__ import annotations
 
@@ -29,7 +30,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
 from src.common import PATHS, get_logger, load_config
-from src.detect.drift import classify_shape
+from src.detect.drift import MIN_RAMP_DAYS, SHAPE_PENALTY, classify_shape
 
 log = get_logger(__name__)
 
@@ -38,10 +39,9 @@ FEATURE_COLUMNS: list[str] = list(SCORE_COLUMNS) + [f"{c}_max7" for c in SCORE_C
 ATTACK_TYPES: tuple[str, ...] = ("none", "step", "drift", "replay", "stuck")
 DEFAULT_SLOPE = 8.0
 FORCED_P = 0.99
-CONSISTENCY_LOOKBACK = 60
 RECLASSIFY_EVERY = 7
 DAILY_SHAPE_DAYS = 14
-SHAPE_LOOKBACK = 90  # the shape fit looks back at least this far from the first alarm day
+SHAPE_LOOKBACK = 90  # default: the shape fit looks back at least this far from the first alarm day
 MAX_SHAPE_DAYS = 180
 LABEL_LEVEL = 0.75  # step/drift/consistency scores this close to an alarm already set the type
 FUSION_MODEL_NAME = "fusion.joblib"
@@ -73,6 +73,19 @@ def fusion_features(det: pd.DataFrame) -> pd.DataFrame:
     maxima = scores.rolling(7, min_periods=1).max()
     maxima.columns = [f"{c}_max7" for c in SCORE_COLUMNS]
     return pd.concat([scores, maxima], axis=1)[FEATURE_COLUMNS]
+
+
+def shape_params(section: Mapping[str, Any] | None) -> dict[str, Any]:
+    """Shape-classification settings from the config `fusion` section (defaults if absent)."""
+    section = dict(section or {})
+
+    def get(key: str, default: Any, cast) -> Any:
+        value = section.get(key)
+        return cast(value) if value is not None else default
+
+    return {"penalty": get("shape_penalty", SHAPE_PENALTY, float),
+            "min_ramp_days": get("shape_min_ramp", MIN_RAMP_DAYS, int),
+            "lookback": get("shape_lookback", SHAPE_LOOKBACK, int)}
 
 
 # ------------------------------------------------------------------ probability
@@ -116,14 +129,9 @@ def load_fusion(path: Path | str | None = None) -> Pipeline:
 
 # ------------------------------------------------------------------ attack type
 
-def attack_types(det: pd.DataFrame, scores: pd.DataFrame | None = None) -> np.ndarray:
-    """Causal per-day attack type (see module docstring).
-
-    For step, drift and consistency alarms the shape is fitted from an anchor fixed when the
-    alarm episode starts: the earliest detector start estimate, but at least SHAPE_LOOKBACK
-    days before that day, so the fit places the change point itself instead of trusting a
-    late start estimate (a slow ramp seen only from its middle looks like a step).
-    """
+def attack_types(det: pd.DataFrame, scores: pd.DataFrame | None = None, penalty: float = SHAPE_PENALTY,
+                 min_ramp_days: int = MIN_RAMP_DAYS, lookback: int = SHAPE_LOOKBACK) -> np.ndarray:
+    """Causal per-day attack type (see module docstring)."""
     scores = scores if scores is not None else _scores(det)
     index = det.index
     n = len(det)
@@ -150,7 +158,7 @@ def attack_types(det: pd.DataFrame, scores: pd.DataFrame | None = None) -> np.nd
             continue
         if anchor is None:
             starts = [d for d in (step_est[i], drift_est[i]) if not pd.isna(d) and d <= end]
-            anchor = min(starts + [end - pd.Timedelta(days=SHAPE_LOOKBACK)])
+            anchor = min(starts + [end - pd.Timedelta(days=int(lookback))])
         if gap is None:
             labels[i] = "step"
             continue
@@ -160,7 +168,7 @@ def attack_types(det: pd.DataFrame, scores: pd.DataFrame | None = None) -> np.nd
         end_eff = anchor + pd.Timedelta(days=span)
         key = (anchor, end_eff)
         if key not in cache:
-            cache[key] = classify_shape(gap, anchor, end_eff)
+            cache[key] = classify_shape(gap, anchor, end_eff, min_ramp_days=int(min_ramp_days), penalty=float(penalty))
         labels[i] = cache[key]
     return labels
 
@@ -193,5 +201,5 @@ def fuse(det: pd.DataFrame, cfg: Mapping[str, Any] | None = None, lr_model: Pipe
     forced = _flag(det, "replay_exact") | _flag(det, "stuck")
     p = np.where(forced, np.maximum(p, FORCED_P), p)
     p = np.clip(np.nan_to_num(p, nan=0.0), 0.0, 1.0)
-    return pd.DataFrame({"p_compromise": p, "attack_type": attack_types(det, scores), "forced": forced},
-                        index=det.index)
+    labels = attack_types(det, scores, **shape_params(section))
+    return pd.DataFrame({"p_compromise": p, "attack_type": labels, "forced": forced}, index=det.index)

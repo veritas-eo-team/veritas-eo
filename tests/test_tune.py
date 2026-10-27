@@ -69,6 +69,8 @@ def test_tune_quick_writes_valid_yaml(frames, tmp_path):
     assert data["step"]["h"] in tune.QUICK_GRIDS["step_h"]
     assert data["consistency"]["min_violations"] in tune.QUICK_GRIDS["cons_minv"]
     assert (tmp_path / "fusion.joblib").exists()
+    assert data["fusion"]["shape_lookback"] in tune.QUICK_SHAPE_GRID["lookback"]
+    assert data["fusion"]["shape_penalty"] in tune.QUICK_SHAPE_GRID["penalty"]
     merged = common.load_config(tuned_path=out)     # the real settings.yaml + this tuned.yaml
     assert merged["step"]["h"] == data["step"]["h"]
     assert {"before", "after"} <= set(res["table"].columns)

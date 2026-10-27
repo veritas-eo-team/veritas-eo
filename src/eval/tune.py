@@ -15,9 +15,12 @@ python -m src.eval.tune [--quick] [--seeds N]
    series (then fewer false alarms, then lower delay). The whole system (fusion + policy)
    is then checked and the budgets shrink until it stays <= 1 false-alarm episode per
    location-year.
-6. Fits the logistic-regression fusion on the same series, saves models/fusion.joblib,
+6. Shape labels: for every caught step and drift, the step-or-ramp decision is scored at
+   the first alarm and 30 days later for a grid of penalty / minimum ramp length /
+   lookback; the setting with the best mean of the four accuracies is kept.
+7. Fits the logistic-regression fusion on the same series, saves models/fusion.joblib,
    and compares its location-out-of-fold Brier score with the rules fusion.
-7. Writes config/tuned.yaml and prints a before/after table ("before" = settings.yaml
+8. Writes config/tuned.yaml and prints a before/after table ("before" = settings.yaml
    without any tuned.yaml).
 
 Attacked series reuse the clean calibrated predictions: the model never sees the target,
@@ -40,8 +43,15 @@ from src.attacks.inject import inject
 from src.common import EPS, PATHS, get_logger, load_config
 from src.detect import consistency, drift, replay, step
 from src.detect.context_model import DEFAULT_MIN_REF_DAYS, DEFAULT_REF_DAYS, ContextModel, calibrate_site
-from src.detect.fusion import DEFAULT_SLOPE, fit_fusion, fusion_features, rules_probability, save_fusion
-from src.eval.metrics import ALARM_ACTIONS, attack_windows, fa_per_location_year, rising_edges
+from src.detect.fusion import (
+    DEFAULT_SLOPE,
+    SHAPE_LOOKBACK,
+    fit_fusion,
+    fusion_features,
+    rules_probability,
+    save_fusion,
+)
+from src.eval.metrics import ALARM_ACTIONS, SETTLE_DAYS, attack_windows, fa_per_location_year, rising_edges
 from src.eval.scenarios import STANDARD, eval_settings
 from src.respond.policy import decide
 
@@ -59,6 +69,12 @@ QUICK_GRIDS: dict[str, tuple] = {
     "step_h": (6.0, 10.0), "drift_L": (4.0, 5.0), "drift_t": (4.0, 6.0),
     "replay_near": (0.8, 0.9), "cons_minv": (2, 3), "cons_cloud_minv": (2, 4),
 }
+SHAPE_GRID: dict[str, tuple] = {
+    "penalty": (0.0, 0.005, 0.01, 0.02, 0.04),
+    "min_ramp": (5, 10, 20),
+    "lookback": (30, 60, 90),
+}
+QUICK_SHAPE_GRID: dict[str, tuple] = {"penalty": (0.0, 0.02), "min_ramp": (5, 10), "lookback": (60, 90)}
 DEFAULT_BUDGETS: dict[str, float] = {"step": 0.3, "drift": 0.3, "replay": 0.2, "consistency": 0.2}
 CATCH_ATTACKS: dict[str, set[str]] = {
     "step": {"step"}, "drift": {"drift"}, "replay": {"replay"}, "consistency": {"step", "drift"},
@@ -308,11 +324,52 @@ def system_eval(cache: _Cache, P: Mapping[str, Mapping[str, Any]], cfg: Mapping[
         probs.append(p)
         dets.append(det.assign(replay_exact=comp["exact"], stuck=comp["stuck"]))
     result: dict[str, Any] = {"fa": evaluate(alarms, cache.series, set())["fa"],
-                              "probs": probs, "dets": dets}
+                              "alarms": alarms, "probs": probs, "dets": dets}
     for attack in ATTACK_NAMES:
         ev = evaluate(alarms, cache.series, {attack})
         result[f"catch_{attack}"], result[f"delay_{attack}"] = ev["catch"], ev["delay"]
     return result
+
+
+def tune_shape(cache: _Cache, sys: Mapping[str, Any], grid: Mapping[str, Sequence]) -> dict[str, Any]:
+    """Pick penalty / minimum ramp / lookback for the step-or-ramp label on train data.
+
+    For each caught step and drift the label is computed at the first alarm and SETTLE_DAYS
+    later, from an anchor `lookback` days before the first alarm; the score is the mean of
+    the four accuracies (step and drift, at both times). Ties go to the larger penalty.
+    """
+    cases = []
+    for s, a in zip(cache.series, sys["alarms"]):
+        if s.attack not in ("step", "drift"):
+            continue
+        hits = np.flatnonzero(a & (s.attacked | s.grace))
+        if not hits.size:
+            continue
+        first, last = int(hits[0]), len(s.df.index) - 1
+        cases.append((s, first, first, "alarm"))
+        cases.append((s, first, min(first + SETTLE_DAYS, last), "30d"))
+
+    def accuracy(penalty: float, min_ramp: int, lookback: int) -> dict[str, float]:
+        hits: dict[str, list[bool]] = {}
+        for s, first, pos, when in cases:
+            index = s.df.index
+            anchor = index[first] - pd.Timedelta(days=int(lookback))
+            label = drift.classify_shape(s.gap, anchor, index[pos], min_ramp_days=int(min_ramp), penalty=float(penalty))
+            hits.setdefault(f"{s.attack}_{when}", []).append(label == s.attack)
+        return {key: float(np.mean(v)) for key, v in sorted(hits.items())}
+
+    results = []
+    for penalty in grid["penalty"]:
+        for min_ramp in grid["min_ramp"]:
+            for lookback in grid["lookback"]:
+                acc = accuracy(penalty, min_ramp, lookback)
+                results.append({"penalty": float(penalty), "min_ramp": int(min_ramp), "lookback": int(lookback),
+                                "acc": acc, "score": float(np.mean(list(acc.values()))) if acc else 0.0})
+    best = max(results, key=lambda r: (round(r["score"], 3), r["penalty"]))
+    default = accuracy(drift.SHAPE_PENALTY, drift.MIN_RAMP_DAYS, SHAPE_LOOKBACK)
+    return {**best, "default_acc": default,
+            "default_score": float(np.mean(list(default.values()))) if default else 0.0,
+            "n_cases": len(cases)}
 
 
 def fit_lr(cache: _Cache, sys: Mapping[str, Any], models_dir: Path | None) -> dict[str, Any]:
@@ -356,7 +413,7 @@ def _f(x: Any) -> float:
 def tune(frames: Sequence[pd.DataFrame], cfg: Mapping[str, Any], *, seeds: int = 1, quick: bool = False,
          out_path: Path | str | None = None, models_dir: Path | str | None = None,
          write: bool = True) -> dict[str, Any]:
-    """Run the tuning procedure; returns {params, table, path, lr, budgets, cloud}."""
+    """Run the tuning procedure; returns {params, table, path, lr, budgets, cloud, shape}."""
     check_train_only(frames)
     settings = eval_settings(cfg)
     ty = settings["test_year"]
@@ -414,6 +471,7 @@ def tune(frames: Sequence[pd.DataFrame], cfg: Mapping[str, Any], *, seeds: int =
             break
         budgets = {det: b * BUDGET_SHRINK for det, b in budgets.items()}
     before = system_eval(cache, base, cfg)
+    shape = tune_shape(cache, after, QUICK_SHAPE_GRID if quick else SHAPE_GRID)
     lr = fit_lr(cache, after, Path(models_dir) if models_dir else None)
 
     rows = []
@@ -433,6 +491,8 @@ def tune(frames: Sequence[pd.DataFrame], cfg: Mapping[str, Any], *, seeds: int =
         "consistency": {"clearsky_tol": _f(tol),
                         "min_violations": int(tuned["consistency"]["min_violations"]),
                         "cloud_min_violations": int(tuned["consistency"]["cloud_min_violations"])},
+        "fusion": {"shape_penalty": _f(shape["penalty"]), "shape_min_ramp": int(shape["min_ramp"]),
+                   "shape_lookback": int(shape["lookback"])},
     }
     record = {
         **params,
@@ -450,6 +510,9 @@ def tune(frames: Sequence[pd.DataFrame], cfg: Mapping[str, Any], *, seeds: int =
                               **{f"catch_{a}": _f(before[f"catch_{a}"]) for a in ATTACK_NAMES}},
             "system_after": {"fa_per_location_year": _f(after["fa"]),
                              **{f"catch_{a}": _f(after[f"catch_{a}"]) for a in ATTACK_NAMES}},
+            "shape_labels": {"cases": int(shape["n_cases"]),
+                             "chosen_accuracy": {k_: _f(v) for k_, v in shape["acc"].items()},
+                             "default_accuracy": {k_: _f(v) for k_, v in shape["default_acc"].items()}},
             "fusion_brier_rules": _f(lr["brier_rules"]),
             "fusion_brier_lr_location_oof": _f(lr["brier_lr_oof"]),
         },
@@ -460,7 +523,8 @@ def tune(frames: Sequence[pd.DataFrame], cfg: Mapping[str, Any], *, seeds: int =
         with open(path, "w", encoding="utf-8") as fh:
             fh.write("# written by: python -m src.eval.tune (train locations only, years before test_year)\n")
             yaml.safe_dump(record, fh, sort_keys=False)
-    return {"params": params, "table": table, "path": path, "lr": lr, "budgets": budgets, "cloud": cloud}
+    return {"params": params, "table": table, "path": path, "lr": lr, "budgets": budgets,
+            "cloud": cloud, "shape": shape}
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -480,6 +544,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     c = res["cloud"]
     print(f"clean cloud conflicts: {c['conflict_days']} of {c['cloudy_days']} heavy-cloud Sentinel-2 days "
           f"({c['rate']:.1%}) look clear in NASA POWER")
+    sh = res["shape"]
+    fmt = lambda acc: ", ".join(f"{k} {v:.0%}" for k, v in acc.items())
+    print(f"shape labels ({sh['n_cases']} cases): chosen penalty {sh['penalty']}, min ramp {sh['min_ramp']} d, "
+          f"lookback {sh['lookback']} d -> {fmt(sh['acc'])}")
+    print(f"  default settings -> {fmt(sh['default_acc'])}")
     print(f"fusion Brier: rules {res['lr']['brier_rules']:.4f}, LR (location out-of-fold) {res['lr']['brier_lr_oof']:.4f}")
     print(f"wrote config/{res['path'].name} and models/{res['lr']['path'].name}")
     return 0

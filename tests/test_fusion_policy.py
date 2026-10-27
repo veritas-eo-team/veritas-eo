@@ -208,3 +208,18 @@ def test_fuse_then_decide_end_to_end():
     assert out["action"].iloc[149] == "accept"
     assert out["action"].iloc[150] == "quarantine" and out["alert"].iloc[150]
     assert out["action"].iloc[153] == "accept"  # released after 3 good days
+
+
+
+def test_shape_params_from_config():
+    det = make_det(500)
+    gap = np.random.default_rng(2).normal(0.0, 0.05, 500)
+    k = np.arange(200)
+    gap[300:] += 0.14 * np.minimum((k + 1.0) / 90.0, 1.0)
+    det["gap"] = gap
+    set_from(det, "drift_score", 340, 1.5)
+    strict = {**CFG, "fusion": {"mode": "rules", "slope": 8.0, "shape_penalty": 0.99}}
+    labels = fusion.fuse(det, strict)["attack_type"]
+    assert not (labels == "drift").any()            # a huge penalty never picks a ramp
+    assert fusion.shape_params({"shape_min_ramp": 10})["min_ramp_days"] == 10
+    assert fusion.shape_params(None)["lookback"] == fusion.SHAPE_LOOKBACK
