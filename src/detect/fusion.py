@@ -41,6 +41,7 @@ FORCED_P = 0.99
 CONSISTENCY_LOOKBACK = 60
 RECLASSIFY_EVERY = 7
 DAILY_SHAPE_DAYS = 14
+SHAPE_LOOKBACK = 90  # the shape fit looks back at least this far from the first alarm day
 MAX_SHAPE_DAYS = 180
 LABEL_LEVEL = 0.75  # step/drift/consistency scores this close to an alarm already set the type
 FUSION_MODEL_NAME = "fusion.joblib"
@@ -116,7 +117,13 @@ def load_fusion(path: Path | str | None = None) -> Pipeline:
 # ------------------------------------------------------------------ attack type
 
 def attack_types(det: pd.DataFrame, scores: pd.DataFrame | None = None) -> np.ndarray:
-    """Causal per-day attack type (see module docstring)."""
+    """Causal per-day attack type (see module docstring).
+
+    For step, drift and consistency alarms the shape is fitted from an anchor fixed when the
+    alarm episode starts: the earliest detector start estimate, but at least SHAPE_LOOKBACK
+    days before that day, so the fit places the change point itself instead of trusting a
+    late start estimate (a slow ramp seen only from its middle looks like a step).
+    """
     scores = scores if scores is not None else _scores(det)
     index = det.index
     n = len(det)
@@ -128,6 +135,7 @@ def attack_types(det: pd.DataFrame, scores: pd.DataFrame | None = None) -> np.nd
     drift_est = _dates(det, "drift_est_start")
     gap = det["gap"].astype(float) if "gap" in det else None
     cache: dict[tuple[pd.Timestamp, pd.Timestamp], str] = {}
+    anchor = None
 
     for i in range(n):
         if stuck[i]:
@@ -137,23 +145,22 @@ def attack_types(det: pd.DataFrame, scores: pd.DataFrame | None = None) -> np.nd
             labels[i] = "replay"
             continue
         end = index[i]
-        if alarm["step_score"][i] or alarm["drift_score"][i]:
-            starts = [d for d in (step_est[i], drift_est[i]) if not pd.isna(d) and d <= end]
-            start = min(starts) if starts else end
-        elif alarm["consistency_score"][i]:
-            start = end - pd.Timedelta(days=CONSISTENCY_LOOKBACK)
-        else:
+        if not (alarm["step_score"][i] or alarm["drift_score"][i] or alarm["consistency_score"][i]):
+            anchor = None
             continue
+        if anchor is None:
+            starts = [d for d in (step_est[i], drift_est[i]) if not pd.isna(d) and d <= end]
+            anchor = min(starts + [end - pd.Timedelta(days=SHAPE_LOOKBACK)])
         if gap is None:
             labels[i] = "step"
             continue
-        span = (end - start).days
+        span = (end - anchor).days
         if span > DAILY_SHAPE_DAYS:
             span = min(span - span % RECLASSIFY_EVERY, MAX_SHAPE_DAYS)
-        end_eff = start + pd.Timedelta(days=span)
-        key = (start, end_eff)
+        end_eff = anchor + pd.Timedelta(days=span)
+        key = (anchor, end_eff)
         if key not in cache:
-            cache[key] = classify_shape(gap, start, end_eff)
+            cache[key] = classify_shape(gap, anchor, end_eff)
         labels[i] = cache[key]
     return labels
 
