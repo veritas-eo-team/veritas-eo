@@ -10,7 +10,7 @@ ui.page_setup("Benchmark")
 import pandas as pd  # noqa: E402
 import streamlit as st  # noqa: E402
 
-st.title("Benchmark")
+ui.hero("Benchmark", "Standard attacks, sweeps and the adaptive attacker on unseen locations and an unseen year")
 res = ui.results_dir()
 table_path = res / "benchmark_table.csv"
 if not table_path.exists():

@@ -78,3 +78,20 @@ def test_record_checks(ui, tmp_path):
     assert ui.record_checks(records, keys) == [True, True, True]
     records[1]["params"] = {"i": 99}
     assert ui.record_checks(records, keys) == [True, False, True]
+
+
+def test_altair_chart_and_explanation(ui):
+    result = fake_result()
+    result.loc[result.index[45], "target"] = 8.0          # above the clear-sky limit below
+    result.loc[result.index[45], "step_score"] = 1.4
+    run_df = pd.DataFrame({"ctx_CLRSKY_SFC_SW_DWN": 7.0, "nb_0": 5.1, "nb_1": 4.9, "cloud": np.nan},
+                          index=result.index)
+    labels = {"start": pd.Timestamp("2024-04-05"), "end": pd.Timestamp("2024-06-28")}
+    spec = ui.altair_run(result, run_df, labels, xlim=(result.index[0], result.index[-1])).to_dict()
+    assert "vconcat" in spec and len(spec["vconcat"]) == 4
+    ex = ui.explain_day(result, run_df, result.index[45], {"fusion": {"slope": 8.0}})
+    texts = " ".join(t for _, t in ex["reasons"])
+    assert "clear-sky limit" in texts and "Step (CUSUM)" in texts
+    assert ex["reasons"][0][0] == "strong"
+    assert len(ex["contrib"]) == 4 and ex["contrib"]["p"].between(0, 1).all()
+    assert len(ui.figure_png(ui.plot_run(result, run_df, labels))) > 1000

@@ -1,4 +1,4 @@
-﻿"""Weather Data Trust Monitor: overview page.  Run with: streamlit run app/app.py"""
+﻿"""VERITAS: overview page.  Run with: streamlit run app/app.py"""
 import sys
 from pathlib import Path
 
@@ -12,27 +12,31 @@ import streamlit as st  # noqa: E402
 
 from src.common import PATHS  # noqa: E402
 
-st.title(ui.TITLE)
-st.caption("Detecting false-data injection in a daily solar-radiation series (NASA POWER + Sentinel-2)")
+ui.hero(ui.BRAND, "Weather data trust monitor · detects false-data injection in a daily solar-radiation "
+                  "series using NASA POWER and Sentinel-2")
 
-st.markdown("""
-1. **Signed data.** Every downloaded file and every sensor reading is hashed, chained and signed (Ed25519).
-2. **Context model.** Each day's value is predicted from what the attacker cannot touch: neighbouring grid cells, clear-sky radiation, weather variables, season.
-3. **Four detectors** watch the gap between observed and expected: CUSUM (steps), EWMA and slope test (drifts), window matching (replays, stuck sensors), physics checks (above clear-sky, sunny under satellite-observed cloud).
-4. **Trust score.** The detector scores are fused into a daily trust score between 0 and 1.
-5. **Action.** Accept, de-weight, verify or quarantine, with an alert when quarantine starts.
-""")
+steps = [
+    ("🔏", "Signed data", "every file and reading hashed, chained and signed"),
+    ("🛰️", "Context model", "value expected from neighbours, clear-sky and weather"),
+    ("📈", "Four detectors", "steps, drifts, replays and physics checks"),
+    ("⚖️", "Trust score", "detector scores fused into a daily 0-1 score"),
+    ("🚦", "Action", "accept · de-weight · verify · quarantine"),
+]
+for col, (icon, title, text) in zip(st.columns(5), steps):
+    col.markdown(f"<div class='vx-card'><div style='font-size:1.6rem'>{icon}</div>"
+                 f"<div class='value' style='font-size:1.05rem'>{title}</div><div class='note'>{text}</div></div>",
+                 unsafe_allow_html=True)
 
-st.subheader("System status")
+st.markdown("### System status")
 cols = st.columns(4)
 n_clean = len(list(PATHS["clean"].glob("*.parquet")))
-model, model_err = ui.get_model()
-cols[0].metric("Clean data", f"{n_clean} locations", "ready" if n_clean else "missing",
-               delta_color="normal" if n_clean else "inverse")
-cols[1].metric("Context model", "trained" if model is not None else "missing",
-               "ready" if model is not None else "demo mode", delta_color="normal" if model is not None else "inverse")
-cols[2].metric("Tuned settings", "loaded" if PATHS["tuned"].exists() else "defaults",
-               "config/tuned.yaml" if PATHS["tuned"].exists() else "not tuned")
+model, _ = ui.get_model()
+ui.card(cols[0], "Clean data", f"{n_clean} locations", "ready" if n_clean else "missing", "ok" if n_clean else "bad")
+ui.card(cols[1], "Context model", "trained" if model is not None else "missing",
+        "ready" if model is not None else "demo mode", "ok" if model is not None else "bad")
+tuned = PATHS["tuned"].exists()
+ui.card(cols[2], "Settings", "tuned" if tuned else "defaults", "config/tuned.yaml" if tuned else "not tuned yet",
+        "ok" if tuned else "mid")
 
 
 @st.cache_data(ttl=60)
@@ -40,35 +44,34 @@ def log_status() -> dict:
     try:
         from src.trust.verify import verify_log
         res = verify_log(check_files=False)
-        return {"ok": bool(res.ok), "n": int(res.n_records), "head": res.head_hash, "reason": res.reason}
+        return {"ok": bool(res.ok), "n": int(res.n_records), "reason": res.reason}
     except Exception as exc:
-        return {"ok": False, "n": 0, "head": None, "reason": str(exc)}
+        return {"ok": False, "n": 0, "reason": str(exc)}
 
 
 status = log_status()
-cols[3].metric("Provenance log", f"{status['n']} records", "chain and signatures OK" if status["ok"] else "check failed",
-               delta_color="normal" if status["ok"] else "inverse")
-if not status["ok"] and status["reason"]:
-    st.caption(f"Log check: {status['reason']}")
-if model is None:
-    ui.demo_banner(True)
+ui.card(cols[3], "Provenance log", f"{status['n']} records",
+        "chain and signatures OK" if status["ok"] else "check failed", "ok" if status["ok"] else "bad")
+ui.demo_banner(model is None)
 
-st.subheader("Headline results (unseen test locations, 2024)")
+st.markdown("### Headline results · unseen test locations, 2024")
 table_path = ui.results_dir() / "benchmark_table.csv"
 if table_path.exists():
     table = pd.read_csv(table_path)
-    main = table[table["group"] == "test"].copy()
-    view = pd.DataFrame({
-        "attack": main["attack"],
-        "runs": main["n_scenarios"],
-        "caught": main["catch_rate"].map(lambda v: "-" if pd.isna(v) else f"{v:.0%}"),
-        "median delay (days)": main["median_delay_days"],
-        "false alarms / location-year": main["fa_per_location_year"].round(2),
-        "F1": main["f1"].round(2),
-        "ROC-AUC": main["roc_auc"].round(2),
-    })
-    st.dataframe(view, hide_index=True, width="stretch")
+    main = table[table["group"] == "test"].set_index("attack")
+    attacks = [a for a in ("step", "drift", "replay") if a in main.index]
+    cols = st.columns(5)
+    caught = main.loc[attacks, "catch_rate"].min() if attacks else float("nan")
+    ui.card(cols[0], "Standard attacks caught", f"{caught:.0%}" if caught == caught else "-",
+            f"{int(main.loc[attacks, 'n_scenarios'].sum())} runs", "ok")
+    for col, attack in zip(cols[1:4], attacks):
+        ui.card(col, f"Median delay · {attack}", f"{main.loc[attack, 'median_delay_days']:g} days",
+                f"F1 {main.loc[attack, 'f1']:.2f} · AUC {main.loc[attack, 'roc_auc']:.2f}")
+    fa = main.loc[attacks, "fa_per_location_year"].mean() if attacks else float("nan")
+    ui.card(cols[4], "False alarms", f"{fa:.2f}", "per location-year (target ≤ 1)", "ok" if fa <= 1 else "bad")
+    with st.expander("Full table"):
+        st.dataframe(main.reset_index().drop(columns=["group"]).round(3), hide_index=True, width="stretch")
 else:
     st.info("No benchmark results yet: run `python -m src.eval.run_benchmark --sweep`.")
 
-st.markdown("Use the pages in the sidebar: **Attack lab**, **Live replay**, **Integrity**, **Benchmark**.")
+st.caption("Pages in the sidebar: Attack lab · Live replay · Integrity · Benchmark")

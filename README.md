@@ -1,4 +1,4 @@
-# Weather Data Trust Monitor
+# VERITAS: Weather Data Trust Monitor
 
 TSYP14 "Ground Truth Under Attack", Track 2: False-Data Injection.
 

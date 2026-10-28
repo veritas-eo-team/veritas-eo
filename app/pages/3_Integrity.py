@@ -12,7 +12,7 @@ import streamlit as st  # noqa: E402
 
 from src.trust.provenance import load_public_keys, read_log  # noqa: E402
 
-st.title("Integrity")
+ui.hero("Integrity", "Signed, hash-chained records, and the gateway that checks every reading")
 st.markdown("Every downloaded and derived file is hashed, chained to the previous record and signed. "
             "Editing, deleting or reordering anything breaks the chain.")
 
