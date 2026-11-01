@@ -220,16 +220,47 @@ def write_summary(path: Path, table: pd.DataFrame, records: pd.DataFrame, settin
                   md_table(table[table["group"] == "unseen_year"]), ""]
     sweep = records[records["family"].str.startswith("sweep") & (records["group"] == main_group)]
     if not sweep.empty:
-        step = sweep[sweep["family"] == "sweep_step"].groupby("size")["caught"].apply(lambda s: s.astype(float).mean())
-        lines += ["## Step size sweep (catch rate)", "",
-                  md_table(step.reset_index().rename(columns={"caught": "catch_rate"})), ""]
+        step = sweep[sweep["family"] == "sweep_step"].groupby("size")["caught"].apply(
+            lambda s: s.astype(float).mean()).reset_index()
+        step_tab = pd.DataFrame({
+            "step_size": [f"{v * 100:+.0f}%" for v in step["size"]],
+            "catch_rate": [f"{v:.0%}" for v in step["caught"]],
+        })
+        lines += ["## Step size sweep (catch rate)", "", md_table(step_tab), ""]
         drift = sweep[(sweep["family"] == "sweep_drift") & (sweep["caught"] == True)]  # noqa: E712
         if not drift.empty:
             tab = drift.groupby(["size", "duration"])["delay_days"].median().reset_index()
-            lines += ["## Drift sweep (median delay of caught drifts, days)", "", md_table(tab, 1), ""]
+            drift_tab = pd.DataFrame({
+                "final_size": [f"{v:.0%}" for v in tab["size"]],
+                "ramp_days": [f"{int(v)}" for v in tab["duration"]],
+                "median_delay_days": [f"{v:g}" for v in tab["delay_days"]],
+            })
+            lines += ["## Drift sweep (median delay of caught drifts, days)", "", md_table(drift_tab), ""]
         rep = sweep[sweep["family"] == "sweep_replay"].groupby(["duration", "noise"])["caught"].apply(
-            lambda s: s.astype(float).mean()).reset_index().rename(columns={"caught": "catch_rate"})
-        lines += ["## Replay sweep (catch rate)", "", md_table(rep), ""]
+            lambda s: s.astype(float).mean()).reset_index()
+        rep_tab = pd.DataFrame({
+            "replay_days": [f"{int(v)}" for v in rep["duration"]],
+            "noise": [f"{v:.1%}" for v in rep["noise"]],
+            "catch_rate": [f"{v:.0%}" for v in rep["caught"]],
+        })
+        lines += ["## Replay sweep (catch rate)", "", md_table(rep_tab), ""]
+        drift = sweep[(sweep["family"] == "sweep_drift") & (sweep["caught"] == True)]  # noqa: E712
+        if not drift.empty:
+            tab = drift.groupby(["size", "duration"])["delay_days"].median().reset_index()
+            drift_tab = pd.DataFrame({
+                "final_size": [f"{v:.0%}" for v in tab["size"]],
+                "ramp_days": [f"{int(v)}" for v in tab["duration"]],
+                "median_delay_days": [f"{v:g}" for v in tab["delay_days"]],
+            })
+            lines += ["## Drift sweep (median delay of caught drifts, days)", "", md_table(drift_tab), ""]
+        rep = sweep[sweep["family"] == "sweep_replay"].groupby(["duration", "noise"])["caught"].apply(
+            lambda s: s.astype(float).mean()).reset_index()
+        rep_tab = pd.DataFrame({
+            "replay_days": [f"{int(v)}" for v in rep["duration"]],
+            "noise": [f"{v:.1%}" for v in rep["noise"]],
+            "catch_rate": [f"{v:.0%}" for v in rep["caught"]],
+        })
+        lines += ["## Replay sweep (catch rate)", "", md_table(rep_tab), ""]
     if limit is not None:
         lines += [f"Measured step detection limit (>= 50% caught): {limit:.0%}; adaptive attacker uses "
                   f"{ADAPTIVE_MARGIN} x limit = {ADAPTIVE_MARGIN * limit:.1%} (row adaptive_step).", ""]

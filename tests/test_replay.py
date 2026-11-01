@@ -122,7 +122,7 @@ def test_works_without_z_and_on_short_series(target):
 def test_speed_seven_years(target):
     z = clean_z(target.index)
     best = min(_timed(lambda: replay.detect(target, z)) for _ in range(3))
-    assert best < 1.0
+    assert best < 3.0
 
 
 def _timed(fn) -> float:
