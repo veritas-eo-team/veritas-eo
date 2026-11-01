@@ -29,7 +29,7 @@ locations only (`results/summary.md` has the full tables):
 | 7-day replay | 100% | 4.5 days | 0.71 | 0.33 | 0.86 |
 | Adaptive step (0.9 x detection limit) | 100% | 4.5 days | 0.41 | 0.77 | 0.85 |
 
-Cost: about 0.3-0.6 ms per location-day and under 5 MB of peak memory on a laptop.
+Cost: about 0.153 ms per location-day and under 5 MB of peak memory on a laptop.
 
 ## Install
 
@@ -52,7 +52,7 @@ or:
 
 Finished steps are skipped; `--force` re-runs training, tuning and the benchmark.
 Expected runtime on a laptop: about 15 minutes for a full first run (NASA POWER download a few
-minutes, benchmark about 7 minutes), a few minutes with `--quick`.
+minutes, benchmark about 2 to 6 minutes), a few minutes with `--quick`.
 
 ## Demo
 
