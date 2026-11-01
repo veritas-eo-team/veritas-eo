@@ -228,15 +228,6 @@ def write_summary(path: Path, table: pd.DataFrame, records: pd.DataFrame, settin
         })
         lines += ["## Step size sweep (catch rate)", "", md_table(step_tab), ""]
         drift = sweep[(sweep["family"] == "sweep_drift") & (sweep["caught"] == True)]  # noqa: E712
-        rep = sweep[sweep["family"] == "sweep_replay"].groupby(["duration", "noise"])["caught"].apply(
-            lambda s: s.astype(float).mean()).reset_index()
-        rep_tab = pd.DataFrame({
-            "replay_days": [f"{int(v)}" for v in rep["duration"]],
-            "noise": [f"{v:.1%}" for v in rep["noise"]],
-            "catch_rate": [f"{v:.0%}" for v in rep["caught"]],
-        })
-        lines += ["## Replay sweep (catch rate)", "", md_table(rep_tab), ""]
-        drift = sweep[(sweep["family"] == "sweep_drift") & (sweep["caught"] == True)]  # noqa: E712
         if not drift.empty:
             tab = drift.groupby(["size", "duration"])["delay_days"].median().reset_index()
             drift_tab = pd.DataFrame({
