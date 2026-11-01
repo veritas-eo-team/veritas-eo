@@ -14,7 +14,7 @@ ui.hero("Benchmark", "Standard attacks, sweeps and the adaptive attacker on unse
 res = ui.results_dir()
 table_path = res / "benchmark_table.csv"
 if not table_path.exists():
-    st.info("No results yet. Run `python -m src.eval.run_benchmark --sweep` (about 7 minutes on a laptop).")
+    st.info("No results yet. Run `python -m src.eval.run_benchmark --sweep` (about 2 to 6 minutes on a laptop).")
     st.stop()
 
 table = pd.read_csv(table_path)

@@ -108,7 +108,7 @@ cloud-consistency check is inactive.
 Every download and derived file is hashed, chained to the previous record and signed with
 Ed25519. To check it on a fresh clone (raw data is not in the repo):
 
-    python -m src.trust.verify --allow-missing --trust 21ded33c4cec6bf2
+   python -m src.trust.verify --allow-missing --trust 21ded33c4cec6bf2 --expected-head 038ee7c91d72c20521f0b32035a0cf426e98a79486253f8daa9c01d8370ec7af
 
 `--trust` pins the signing key id of the reference run; the log head hash is printed in
 `results/summary.md`. Only one machine should append to the log (a second machine would create
@@ -148,6 +148,8 @@ its own key).
 - Replay alarms persist for a while after a short replay ends, which lowers per-day precision.
 - The clean-run false-alarm estimate on test locations rests on few location-years; the
   pre-attack days of all runs give a larger sample (0.4-0.7 per location-year).
+- Cloudy tropical sites are slow: at the test site abidjan, a 12% step takes a median of about a month to alarm, and a 2.7% step about five months.
+- The clear-sky check only catches inflated values; downward bias relies on the statistical detectors and is caught later.
 
 ## Anonymity check
 
