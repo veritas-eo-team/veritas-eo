@@ -150,10 +150,3 @@ its own key).
   pre-attack days of all runs give a larger sample (0.4-0.7 per location-year).
 - Cloudy tropical sites are slow: at the test site abidjan, a 12% step takes a median of about a month to alarm, and a 2.7% step about five months.
 - The clear-sky check only catches inflated values; downward bias relies on the statistical detectors and is caught later.
-
-## Anonymity check
-
-    python scripts/anon_check.py --banned .anon_banned.txt
-
-Scans files and git history for banned terms, emails, personal paths, notebook outputs and
-file metadata. Keep `.anon_banned.txt` outside version control.
