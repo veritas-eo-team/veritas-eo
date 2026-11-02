@@ -1,3 +1,4 @@
+# Python dependencies (minimum versions)
 pandas>=2.1
 numpy>=1.26
 scikit-learn>=1.3
