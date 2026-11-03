@@ -9,7 +9,7 @@ A daily solar-radiation series can be falsified quietly: a 12% bias, a slow drif
 
 The second layer exists because the first one has a blind spot: a compromised sensor signs its false values with a valid key, and the signatures accept it.
 
-**Headline result:** on 5 locations and a year the system never saw, every standard attack (12% step, drift to 15%, 7-day replay) was caught in all 100 runs, with 0.4 to 0.7 false-alarm episodes per location-year, at a median 0.153 ms per location-day on a laptop.
+**Headline result:** on 5 test locations (out of 15) that the system never saw during training, in a year it never saw (2024), every standard attack (12% step, drift to 15%, 7-day replay) was caught in all 100 runs, with 0.4 to 0.7 false-alarm episodes per location-year, at a median 0.153 ms per location-day on a laptop.
 
 ---
 
