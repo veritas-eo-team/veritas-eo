@@ -26,6 +26,7 @@ from __future__ import annotations
 from typing import Any, Iterable, Mapping, Sequence
 
 import numpy as np
+import warnings
 import pandas as pd
 
 from src.common import get_logger, load_config
@@ -50,12 +51,16 @@ DEFAULTS: dict[str, Any] = {
     "ref_lag": 60,
     "ref_span": 365,
     "ref_min_days": 20,
+    "ref_mode": "rolling",
+    "ref_years": 3,
+    "ref_halfwidth": 30,
 }
 TOL_GRID: tuple[float, ...] = (0.0, 0.01, 0.02, 0.03, 0.04, 0.05, 0.075, 0.1, 0.15)
 UNDER_TOL_GRID: tuple[float, ...] = (0.01, 0.015, 0.02, 0.025, 0.03, 0.04, 0.05, 0.075)
 
 _INT_KEYS = ("window", "min_violations", "cloud_min_violations",
-             "under_n", "under_stale", "ref_lag", "ref_span", "ref_min_days")
+             "under_n", "under_stale", "ref_lag", "ref_span", "ref_min_days",
+             "ref_years", "ref_halfwidth")
 _FLOAT_KEYS = ("clearsky_tol", "cloud_thr", "clearness_thr",
                "nb_clear_thr", "clear_cloud_thr", "under_tol")
 
@@ -91,6 +96,11 @@ def merge_params(params: Mapping[str, Any] | None = None) -> dict[str, Any]:
         raise ValueError("consistency.nb_clear_thr must be in (0, 1.5]")
     if not 0.0 < merged["under_tol"] < 1.0:
         raise ValueError("consistency.under_tol must be in (0, 1)")
+    merged["ref_mode"] = str(merged["ref_mode"]).lower()
+    if merged["ref_mode"] not in ("rolling", "seasonal"):
+        raise ValueError("consistency.ref_mode must be 'rolling' or 'seasonal'")
+    if merged["ref_years"] < 1 or merged["ref_halfwidth"] < 0:
+        raise ValueError("consistency.ref_years must be >= 1 and ref_halfwidth >= 0")
     return merged
 
 
@@ -147,6 +157,29 @@ def _reference(series: np.ndarray, ref_lag: int, ref_span: int, ref_min_days: in
     s = pd.Series(series)
     return s.shift(ref_lag).rolling(ref_span - ref_lag, min_periods=ref_min_days).median().to_numpy()
 
+def _seasonal_reference(series: np.ndarray, ref_years: int, halfwidth: int, ref_min_days: int) -> np.ndarray:
+    """Causal seasonal reference: median of `series` within +/- halfwidth days of the same
+    date in each of the previous ref_years years (one row per day)."""
+    s = np.asarray(series, dtype=float)
+    n = len(s)
+    cols = []
+    for k in range(1, ref_years + 1):
+        for off in range(-halfwidth, halfwidth + 1):
+            lag = 365 * k + off
+            if lag <= 0 or lag >= n:
+                continue
+            shifted = np.full(n, np.nan)
+            shifted[lag:] = s[:-lag]
+            cols.append(shifted)
+    if not cols:
+        return np.full(n, np.nan)
+    stack = np.vstack(cols)
+    count = np.sum(~np.isnan(stack), axis=0)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)
+        med = np.nanmedian(stack, axis=0)
+    med[count < ref_min_days] = np.nan
+    return med
 
 def mirror_deviation(df: pd.DataFrame, p: Mapping[str, Any]) -> np.ndarray:
     """Relative deviation r / ref - 1 of target / mean(neighbours) on clear days, NaN elsewhere."""
@@ -158,7 +191,10 @@ def mirror_deviation(df: pd.DataFrame, p: Mapping[str, Any]) -> np.ndarray:
     with np.errstate(invalid="ignore", divide="ignore"):
         nb_mean = np.nanmean(nb, axis=1) if nb.size else np.full(len(df), np.nan)
         ratio = np.where(clear & (nb_mean > 0), target / nb_mean, np.nan)
-    ref = _reference(ratio, p["ref_lag"], p["ref_span"], p["ref_min_days"])
+    if p["ref_mode"] == "seasonal":
+        ref = _seasonal_reference(ratio, p["ref_years"], p["ref_halfwidth"], p["ref_min_days"])
+    else:
+        ref = _reference(ratio, p["ref_lag"], p["ref_span"], p["ref_min_days"])
     with np.errstate(invalid="ignore", divide="ignore"):
         return ratio / ref - 1.0
 

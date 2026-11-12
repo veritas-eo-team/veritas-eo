@@ -91,3 +91,11 @@ def test_natural_alarms_low_on_clean_data():
 def test_invalid_mirror_params(bad):
     with pytest.raises(ValueError):
         C.merge_params(bad)
+
+def test_seasonal_reference_catches_step():
+    start = 900
+    out = C.detect(make_frame(n=1200, attack_start=start),
+                   params={"mirror": True, "ref_mode": "seasonal"})
+    assert not out["alarm"].iloc[:start].any()
+    hits = np.flatnonzero(out["alarm"].to_numpy())
+    assert hits.size and start <= hits[0] <= start + 40
