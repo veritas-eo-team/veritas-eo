@@ -12,6 +12,8 @@ Test year 2024; attacks start in 2024-02-01..2024-09-30; pipeline warm-up 365 da
 | test | replay | 100 | 1.000 | 4.500 | 0.430 | 1.000 | 0.000 | 0.711 | 0.257 | 0.461 | 0.330 | 0.860 | 0.027 |
 | test | adaptive_step | 50 | 1.000 | 4.500 | 0.960 | 0.920 | 5.000 | 0.405 | 0.983 | 0.633 | 0.770 | 0.853 | 0.178 |
 
+**Note on false-alarm figures:** the per-attack false-alarm rate ranges from 0.40 to 0.71 per location-year, measured on the clean days of each attack's runs. The app's overview shows 0.51, which is the average across all 300 standard-attack runs. Both are computed from the same benchmark; they summarise it differently.
+
 ## Unseen year (test year on train locations)
 
 | group | attack | n_scenarios | catch_rate | median_delay_days | attribution_acc | attribution_acc_30d | median_abs_start_error_days | fa_per_location_year | precision | recall | f1 | roc_auc | brier |
