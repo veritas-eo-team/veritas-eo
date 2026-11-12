@@ -179,7 +179,7 @@ def run_pipeline(df: pd.DataFrame, model: ContextModel | None = None,
         "step_est_start": step_est, "drift_est_start": drift_est,
     }, index=index)
     fused = fuse(det, cfg)
-    decided = decide(fused, cfg)
+    decided = decide(fused.assign(gap=gap.to_numpy()), cfg)
 
     est_start = _c5_est_start(
         index, decided["action"].to_numpy(), fused["attack_type"].to_numpy(),
