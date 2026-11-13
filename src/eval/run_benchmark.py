@@ -32,7 +32,7 @@ THRESHOLDS = np.round(np.arange(0.30, 0.96, 0.05), 2)
 # ------------------------------------------------------------------ running
 
 def run_scenario(scn: Mapping[str, Any], frame: pd.DataFrame, model: Any, cfg: Mapping[str, Any],
-                 measure_memory: bool = False) -> tuple[dict[str, Any], pd.DataFrame]:
+                measure_memory: bool = False, pipeline: Any = None) -> tuple[dict[str, Any], pd.DataFrame]:
     """Inject, run the pipeline on [start - warmup, end of test year], score the test year."""
     from src.attacks.inject import adaptive_step, inject
 
@@ -57,7 +57,12 @@ def run_scenario(scn: Mapping[str, Any], frame: pd.DataFrame, model: Any, cfg: M
     run_df = frame.loc[begin:f"{ty}-12-31"].copy()
     run_df["target"] = attacked.loc[run_df.index]
 
-    if measure_memory:
+    if pipeline is not None:
+        t0 = time.perf_counter()
+        result = pipeline(run_df, model, cfg)
+        ms_per_day = (time.perf_counter() - t0) * 1000.0 / max(len(run_df), 1)
+        peak_mb = float("nan")
+    elif measure_memory:
         result, ms_per_day, peak_mb = timed_run(run_df, model, cfg)
     else:
         t0 = time.perf_counter()
@@ -76,11 +81,12 @@ def run_scenario(scn: Mapping[str, Any], frame: pd.DataFrame, model: Any, cfg: M
 
 
 def run_scenarios(scenarios: Sequence[Mapping[str, Any]], frames: Mapping[str, pd.DataFrame], model: Any,
-                  cfg: Mapping[str, Any]) -> tuple[pd.DataFrame, pd.DataFrame]:
+                  cfg: Mapping[str, Any], pipeline: Any = None) -> tuple[pd.DataFrame, pd.DataFrame]:
     records, days = [], []
     for i, scn in enumerate(scenarios):
         rec, perday = run_scenario(scn, frames[scn["location"]], model, cfg,
-                                   measure_memory=scn["attack"] == "none")
+                                   measure_memory=pipeline is None and scn["attack"] == "none",
+                                   pipeline=pipeline)
         records.append(rec)
         days.append(perday)
         if (i + 1) % 25 == 0 or i + 1 == len(scenarios):
