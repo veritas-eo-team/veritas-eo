@@ -7,20 +7,18 @@ Test year 2024; attacks start in 2024-02-01..2024-09-30; pipeline warm-up 365 da
 | group | attack | n_scenarios | catch_rate | median_delay_days | attribution_acc | attribution_acc_30d | median_abs_start_error_days | fa_per_location_year | precision | recall | f1 | roc_auc | brier |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | test | none | 5 | - | - | - | - | - | 0.998 | 0.000 | - | - | - | 0.033 |
-| test | step | 100 | 1.000 | 2.000 | 0.870 | 0.810 | 1.000 | 0.403 | 0.988 | 0.874 | 0.928 | 0.986 | 0.060 |
-| test | drift | 100 | 1.000 | 10.000 | 0.160 | 0.350 | 6.000 | 0.403 | 0.988 | 0.858 | 0.918 | 0.955 | 0.069 |
-| test | replay | 100 | 1.000 | 4.500 | 0.430 | 1.000 | 0.000 | 0.711 | 0.257 | 0.461 | 0.330 | 0.860 | 0.027 |
-| test | adaptive_step | 50 | 1.000 | 4.500 | 0.960 | 0.920 | 5.000 | 0.405 | 0.983 | 0.633 | 0.770 | 0.853 | 0.178 |
-
-**Note on false-alarm figures:** the per-attack false-alarm rate ranges from 0.40 to 0.71 per location-year, measured on the clean days of each attack's runs. The app's overview shows 0.51, which is the average across all 300 standard-attack runs. Both are computed from the same benchmark; they summarise it differently.
+| test | step | 100 | 1.000 | 2.000 | 0.870 | 0.810 | 1.000 | 0.403 | 0.988 | 0.881 | 0.932 | 0.986 | 0.060 |
+| test | drift | 100 | 1.000 | 10.000 | 0.160 | 0.350 | 6.000 | 0.403 | 0.988 | 0.862 | 0.921 | 0.955 | 0.069 |
+| test | replay | 100 | 1.000 | 4.500 | 0.430 | 1.000 | 0.000 | 0.711 | 0.248 | 0.461 | 0.323 | 0.860 | 0.027 |
+| test | adaptive_step | 50 | 1.000 | 4.500 | 0.960 | 0.920 | 5.000 | 0.405 | 0.984 | 0.648 | 0.781 | 0.853 | 0.178 |
 
 ## Unseen year (test year on train locations)
 
 | group | attack | n_scenarios | catch_rate | median_delay_days | attribution_acc | attribution_acc_30d | median_abs_start_error_days | fa_per_location_year | precision | recall | f1 | roc_auc | brier |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | unseen_year | none | 10 | - | - | - | - | - | 0.599 | 0.000 | - | - | - | 0.006 |
-| unseen_year | step | 200 | 1.000 | 3.000 | 0.895 | 0.865 | 2.000 | 0.537 | 0.987 | 0.941 | 0.964 | 0.991 | 0.036 |
-| unseen_year | drift | 200 | 1.000 | 13.000 | 0.105 | 0.550 | 6.500 | 0.537 | 0.987 | 0.884 | 0.933 | 0.969 | 0.061 |
+| unseen_year | step | 200 | 1.000 | 3.000 | 0.895 | 0.865 | 2.000 | 0.537 | 0.988 | 0.948 | 0.968 | 0.991 | 0.036 |
+| unseen_year | drift | 200 | 1.000 | 13.000 | 0.105 | 0.550 | 6.500 | 0.537 | 0.987 | 0.890 | 0.936 | 0.969 | 0.061 |
 | unseen_year | replay | 200 | 1.000 | 4.000 | 0.350 | 1.000 | 0.000 | 0.583 | 0.360 | 0.463 | 0.405 | 0.900 | 0.019 |
 
 ## Step size sweep (catch rate)
@@ -82,21 +80,21 @@ Measured step detection limit (>= 50% caught): 3%; adaptive attacker uses 0.9 x 
 
 ## Cost
 
-- median 0.153 ms per location-day (1965 runs)
+- median 0.254 ms per location-day (1965 runs)
 - peak traced memory 4.7 MB (clean runs, tracemalloc)
 
 ## System
 
 - os: Windows 10
-- os_version: 10.0.22621
+- os_version: 10.0.26200
 - machine: AMD64
 - processor: Intel64 Family 6 Model 154 Stepping 3, GenuineIntel
 - cores_physical: 8
 - cores_logical: 12
-- ram_gb: 31.7
-- python: 3.11.18
+- ram_gb: 23.7
+- python: 3.11.17
 - numpy: 2.4.6
-- pandas: 3.1.0
+- pandas: 3.0.6
 
 Provenance log head hash: `038ee7c91d72c20521f0b32035a0cf426e98a79486253f8daa9c01d8370ec7af`
 
@@ -106,4 +104,4 @@ Provenance log head hash: `038ee7c91d72c20521f0b32035a0cf426e98a79486253f8daa9c0
 - false alarms = alarm episodes starting on days that are neither attacked nor in the 30-day grace period after the attack; per location-year of such days
 - one clean run per location (the pipeline is deterministic)
 - per-day precision/recall/F1/AUC/Brier pool the test-year days of each row's runs (grace days excluded)
-- policy thresholds: {'accept': 0.8, 'deweight': 0.5, 'verify': 0.2, 'hold_days': 3}
+- policy thresholds: {'accept': 0.8, 'deweight': 0.5, 'verify': 0.2, 'hold_days': 3, 'sticky': True}
