@@ -68,6 +68,7 @@ policy:
   deweight: 0.5
   verify: 0.2
   hold_days: 3
+  sticky: true
 
 eval:
   n_seeds: 20
