@@ -16,3 +16,5 @@ __pycache__/
 
 # outputs of manual pipeline runs
 results/run_*.csv
+
+data/external/
