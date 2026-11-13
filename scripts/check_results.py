@@ -21,7 +21,7 @@ def is_numeric(s):
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--new", default="results/benchmark_table.csv")
-    ap.add_argument("--ref", default="results/phase1_baseline/benchmark_table.csv")
+    ap.add_argument("--ref", default="results/reference/benchmark_table.csv")
     ap.add_argument("--tol", type=float, default=1e-6)
     a = ap.parse_args()
 
