@@ -256,6 +256,7 @@ def score_series(target: pd.Series, cfg: Mapping[str, Any] | None = None, model:
     ref_days = int((cfg.get("context_model") or {}).get("ref_days") or 365)
     valid = int(df["target"].notna().sum())
     info.update(days=len(df), valid_days=valid, ref_days=ref_days, short_reference=valid < ref_days + 30)
+    info["frame"] = df
     return result, info
 
 

@@ -291,7 +291,7 @@ def altair_run(result: pd.DataFrame, run_df: pd.DataFrame, labels: Mapping[str, 
 
     values = d.melt(id_vars="date", value_vars=["observed", "expected"], var_name="series", value_name="value")
     lines = alt.Chart(values).mark_line(strokeWidth=1.5).encode(
-        x=x, y=alt.Y("value:Q", title="kWh/m²/day"),
+        x=x, y=alt.Y("value:Q", title="MJ/m²/day"),
         color=alt.Color("series:N", scale=alt.Scale(domain=["observed", "expected"], range=["#38bdf8", "#94a3b8"]),
                         legend=alt.Legend(orient="top", title=None)),
         tooltip=[when, "series:N", alt.Tooltip("value:Q", format=".2f")])
@@ -337,7 +337,7 @@ def plot_run(result: pd.DataFrame, run_df: pd.DataFrame, labels: Mapping[str, An
     ax.plot(r.index, r["expected"], lw=1.0, color="#9e9e9e", label="expected from context")
     if CLRSKY in run_df:
         ax.plot(r.index, run_df[CLRSKY].reindex(r.index), lw=0.8, ls=":", color="#b8860b", label="clear-sky limit")
-    ax.set_ylabel("kWh/m²/day")
+    ax.set_ylabel("MJ/m²/day")
     ax.legend(loc="upper left", fontsize=8)
     axes[1].plot(r.index, (np.exp(r["gap"]) - 1.0) * 100.0, lw=0.9, color="#37474f")
     axes[1].axhline(0, color="#9e9e9e", lw=0.6)
@@ -390,7 +390,7 @@ def explain_day(result: pd.DataFrame, run_df: pd.DataFrame, day: Any, cfg: Mappi
     if pd.notna(row["z"]):
         z = float(row["z"])
         level = "strong" if abs(z) >= 3 else "medium" if abs(z) >= 2 else "info"
-        reasons.append((level, f"The site reports {target:.2f} kWh/m²/day, {gap_pct:+.1f}% away from the "
+        reasons.append((level, f"The site reports {target:.2f} MJ/m²/day, {gap_pct:+.1f}% away from the "
                                f"{float(row['expected']):.2f} expected from neighbours, clear-sky radiation and "
                                f"weather ({z:+.1f} standard deviations)."))
     nb_cols = [c for c in run_df.columns if c.startswith("nb_")]
@@ -398,7 +398,7 @@ def explain_day(result: pd.DataFrame, run_df: pd.DataFrame, day: Any, cfg: Mappi
         nb = run_df.loc[day, nb_cols].astype(float).dropna()
         if len(nb):
             reasons.append(("info", f"Neighbouring grid cells read {', '.join(f'{v:.2f}' for v in nb)} "
-                                    f"kWh/m²/day (mean {nb.mean():.2f})."))
+                                    f"MJ/m²/day (mean {nb.mean():.2f})."))
     clr = float(run_df.loc[day, CLRSKY]) if CLRSKY in run_df and pd.notna(run_df.loc[day, CLRSKY]) else None
     clearness = target / clr if clr and clr > 0 else None
     if clr is not None:
