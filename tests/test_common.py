@@ -33,11 +33,11 @@ def expected_columns(n_neighbors: int) -> list[str]:
 
 def test_locations_count_and_split(cfg):
     locations = cfg["locations"]
-    assert len(locations) == 15
+    assert len(locations) == 23
     splits = [loc["split"] for loc in locations]
-    assert splits.count("train") == 10
+    assert splits.count("train") == 18
     assert splits.count("test") == 5
-    assert len({loc["id"] for loc in locations}) == 15
+    assert len({loc["id"] for loc in locations}) == 23
 
 
 def test_core_settings(cfg):
@@ -70,12 +70,12 @@ def test_tuned_overrides_settings(tmp_paths):
     base = yaml.safe_load(PATHS["settings"].read_text(encoding="utf-8"))
     assert cfg["step"]["h"] == 7.5
     assert cfg["step"]["k"] == base["step"]["k"]
-    assert len(cfg["locations"]) == 15
+    assert len(cfg["locations"]) == 23
 
 
 def test_empty_tuned_is_ignored(tmp_paths):
     PATHS["tuned"].write_text("", encoding="utf-8")
-    assert len(load_config()["locations"]) == 15
+    assert len(load_config()["locations"]) == 23
 
 
 def test_tuned_cannot_change_locations(tmp_paths):

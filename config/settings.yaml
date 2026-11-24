@@ -22,6 +22,14 @@ locations:
   - {id: nairobi,       lat: -1.29,  lon: 36.82,   climate: tropical_highland, split: train}
   - {id: black_forest,  lat: 48.00,  lon: 8.20,    climate: forest,            split: train}
   - {id: ludhiana,      lat: 30.90,  lon: 75.85,   climate: farmland,          split: train}
+  - {id: helsinki,    lat: 60.17,  lon: 24.94,   climate: boreal,              split: train}
+  - {id: winnipeg,    lat: 49.90,  lon: -97.14,  climate: continental,         split: train}
+  - {id: lhasa,       lat: 29.65,  lon: 91.10,   climate: highland_plateau,    split: train}
+  - {id: la_paz,      lat: -16.50, lon: -68.15,  climate: tropical_highland,   split: train}
+  - {id: chiang_mai,  lat: 18.79,  lon: 98.98,   climate: tropical_monsoon,    split: train}
+  - {id: niamey,      lat: 13.51,  lon: 2.11,    climate: sahel,               split: train}
+  - {id: guangzhou,   lat: 23.13,  lon: 113.26,  climate: subtropical_monsoon, split: train}
+  - {id: riyadh,      lat: 24.71,  lon: 46.68,   climate: arid_dust,           split: train}
   # test split: never read during training or tuning
   - {id: kairouan,      lat: 35.68,  lon: 10.10,   climate: semi_arid,         split: test}
   - {id: alice_springs, lat: -23.70, lon: 133.88,  climate: desert,            split: test}
