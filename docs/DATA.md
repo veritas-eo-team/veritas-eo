@@ -91,6 +91,14 @@ The 1° offset puts each neighbour in a different solar grid cell. During alignm
 | nairobi | −1.29 | 36.82 | tropical highland | train |
 | black_forest | 48.00 | 8.20 | forest | train |
 | ludhiana | 30.90 | 75.85 | farmland | train |
+| helsinki | 60.17 | 24.94 | boreal | train |
+| winnipeg | 49.90 | −97.14 | continental | train |
+| lhasa | 29.65 | 91.10 | highland plateau | train |
+| la_paz | −16.50 | −68.15 | tropical highland | train |
+| chiang_mai | 18.79 | 98.98 | tropical monsoon | train |
+| niamey | 13.51 | 2.11 | sahel | train |
+| guangzhou | 23.13 | 113.26 | subtropical monsoon | train |
+| riyadh | 24.71 | 46.68 | arid dust | train |
 | kairouan | 35.68 | 10.10 | semi-arid | test |
 | alice_springs | −23.70 | 133.88 | desert | test |
 | lyon | 45.76 | 4.84 | temperate | test |
@@ -100,6 +108,7 @@ The 1° offset puts each neighbour in a different solar grid cell. During alignm
 - **Train** locations, years 2018–2023: context model, threshold tuning, fusion model.
 - **Test** locations, 2024: main benchmark. Never seen by training or tuning; the code refuses test frames in both.
 - **Unseen year**: the train locations in 2024, as a second benchmark.
+- **Neighbour count**: Helsinki and Winnipeg keep three independent neighbours. At those longitudes the NASA POWER solar grid is wider than the 1° offset, so the east cell repeats the site; `align` drops it and the context model uses the remaining three.
 
 ## 4. Clean, aligned frames
 

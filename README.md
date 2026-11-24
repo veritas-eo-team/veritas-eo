@@ -9,7 +9,7 @@ A daily solar-radiation series can be falsified quietly: a 12% bias, a slow drif
 
 The second layer exists because the first one has a blind spot: a compromised sensor signs its false values with a valid key, and the signatures accept it.
 
-**Headline result:** on 5 test locations (out of 15) that the system never saw during training, in a year it never saw (2024), every standard attack (12% step, drift to 15%, 7-day replay) was caught in all 100 runs, with 0.4 to 0.7 false-alarm episodes per location-year, at a median 0.153 ms per location-day on a laptop.
+**Headline result:** on 5 test locations (out of 23) that the system never saw during training, in a year it never saw (2024), every standard attack (12% step, drift to 15%, 7-day replay) was caught in all 100 runs, with 0.4 to 0.7 false-alarm episodes per location-year, at a median 0.153 ms per location-day on a laptop.
 
 ---
 
@@ -73,7 +73,7 @@ flowchart LR
 | 0.2 to 0.5 | verify (ask for independent confirmation) |
 | < 0.2, or exact replay / stuck | quarantine, with an alert |
 
-All thresholds were tuned on 10 train locations only, using out-of-fold predictions.
+All thresholds were tuned on 18 train locations only, using out-of-fold predictions.
 
 ---
 
@@ -88,7 +88,7 @@ Unseen test locations (5 sites × 20 seeds per attack), test year 2024. Full tab
 | 7-day replay | 100% | 4.5 days | 0.71 | 0.33 | 0.86 |
 | Adaptive step (0.9 × detection limit = 2.7%) | 100% | 4.5 days | 0.41 | 0.77 | 0.85 |
 
-The same attacks on the 10 train locations in the unseen year 2024: all caught, median delays of 3, 13 and 4 days.
+The same attacks on the 18 train locations in the unseen year 2024: all caught, median delays of 3, 13 and 4 days.
 
 **Evasion.** Every upward step from +3% is caught. Downward steps are harder (−3%: 80% caught, −8%: 92%). Slower, smaller drifts are caught later: 5% over 180 days after a median of 37 days. Adding noise to a 7-day replay to defeat exact matching still leaves 96% caught; 3-day replays are caught 36% of the time.
 
@@ -210,7 +210,7 @@ python -m src.trust.verify --allow-missing --trust 21ded33c4cec6bf2 --expected-h
 ## Reproducibility
 
 - **Deterministic:** every random choice takes a seed. Rerunning the benchmark reproduces `results/benchmark_table.csv` exactly.
-- **No leakage:** split by location and by year (10 train, 5 test locations; 2024 held out). The context model and all thresholds use train locations and earlier years only, and the code refuses test frames for training and tuning.
+- **No leakage:** split by location and by year (18 train, 5 test locations; 2024 held out). The context model and all thresholds use train locations and earlier years only, and the code refuses test frames for training and tuning.
 - **Causal:** day *t* only uses data up to day *t*; a test compares a run on a prefix with the full run.
 
 **Tested on:** Intel x86-64 laptop CPU (8 physical / 12 logical cores), 31.7 GB RAM, Windows (build 10.0.22621), Python 3.11.18, NumPy 2.4.6, pandas 3.1.0, no GPU. Details in `results/system_info.json`.
