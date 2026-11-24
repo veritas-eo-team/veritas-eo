@@ -95,7 +95,7 @@ def test_end_to_end_with_mocked_download(monkeypatch):
     site = pd.DataFrame({tv: df["target"], **{c[4:]: df[c] for c in df.columns if c.startswith("ctx_")}})
     cands = {cell: df[f"nb_{i}"] for i, cell in enumerate(["nb_N", "nb_E", "nb_S", "nb_W"]) if f"nb_{i}" in df}
     monkeypatch.setattr(SF, "fetch_context", lambda *a, **k: (site, cands, {tv: "kWh/m^2/day"}))
-    result, info = SF.score_series(_attacked(df), cfg, lat=35.68, lon=10.1, cache=False)
+    result, info = SF.score_series(_attacked(df), cfg, lat=35.68, lon=10.1, cache=False, history="self")
     assert result["action"].isin(SF.ALARM_ACTIONS).loc["2024-05-01":"2024-05-31"].any()
     assert info["mode"] == "NASA POWER download"
     assert len(info["neighbours"]) >= 2
