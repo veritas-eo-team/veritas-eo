@@ -1,0 +1,214 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-sans: "Inter", "Helvetica Neue", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Times New Roman", Georgia, serif;
+  --font-mono: "IBM Plex Mono", "SFMono-Regular", ui-monospace, "Cascadia Mono", Menlo, monospace;
+  --edge: rgba(11, 11, 12, 0.14);
+  --edge-soft: rgba(11, 11, 12, 0.08);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background: #f3f1ea;
+  color: #0b0b0c;
+  font-family: var(--font-sans);
+  font-feature-settings: "ss01" on, "cv05" on;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: #0b0b0c;
+  color: #f3f1ea;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid #0b0b0c;
+  outline-offset: 3px;
+}
+
+@layer components {
+  .page {
+    margin: 0 auto;
+    width: 100%;
+    max-width: 1440px;
+    padding: 0 24px;
+  }
+
+  @media (min-width: 768px) {
+    .page {
+      padding: 0 48px;
+    }
+  }
+
+  @media (min-width: 1280px) {
+    .page {
+      padding: 0 72px;
+    }
+  }
+
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+    color: #6b6c70;
+  }
+
+  .display {
+    font-family: var(--font-serif);
+    font-weight: 400;
+    letter-spacing: -0.03em;
+    line-height: 0.95;
+  }
+
+  .rule {
+    border-top: 1px solid var(--edge);
+  }
+
+  .rule-soft {
+    border-top: 1px solid var(--edge-soft);
+  }
+
+  .num {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.75rem;
+    border: 1px solid #0b0b0c;
+    background: #0b0b0c;
+    color: #f3f1ea;
+    padding: 0.95rem 1.4rem;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    transition: background 220ms ease, color 220ms ease, transform 220ms ease;
+  }
+
+  .btn:hover {
+    background: transparent;
+    color: #0b0b0c;
+  }
+
+  .btn:active {
+    transform: translateY(1px);
+  }
+
+  .btn-ghost {
+    background: transparent;
+    color: #0b0b0c;
+  }
+
+  .btn-ghost:hover {
+    background: #0b0b0c;
+    color: #f3f1ea;
+  }
+
+  .field {
+    width: 100%;
+    border: 1px solid var(--edge);
+    background: #fbf9f4;
+    padding: 0.7rem 0.8rem;
+    font-size: 0.875rem;
+    appearance: none;
+    border-radius: 0;
+  }
+
+  .field:hover {
+    border-color: rgba(11, 11, 12, 0.3);
+  }
+
+  .label {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: #6b6c70;
+    margin-bottom: 0.45rem;
+  }
+
+  .panel {
+    border: 1px solid var(--edge);
+    background: #fbf9f4;
+  }
+
+  .link-underline {
+    position: relative;
+    display: inline-block;
+  }
+
+  .link-underline::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    bottom: -2px;
+    height: 1px;
+    width: 100%;
+    background: currentColor;
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 260ms cubic-bezier(0.2, 0.7, 0.2, 1);
+  }
+
+  .link-underline:hover::after {
+    transform: scaleX(1);
+  }
+}
+
+.grid-lines {
+  background-image: linear-gradient(to right, rgba(11, 11, 12, 0.06) 1px, transparent 1px);
+  background-size: 25% 100%;
+}
+
+.tick {
+  background-image: repeating-linear-gradient(
+    to right,
+    rgba(11, 11, 12, 0.18) 0 1px,
+    transparent 1px 8px
+  );
+  height: 6px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}

@@ -16,17 +16,24 @@ Every new terminal: `conda activate eo-trust` (the prompt must show `(eo-trust)`
 
 Prints the day-by-day trust score and action as the attack starts, then shows that editing a logged file is caught by the signed log (on a temporary copy).
 
-## 3. Web app
+## 3. Web console
 
-    streamlit run app/app.py
+The console lives in `web/` and talks to the Python pipeline through a local API. First run:
+
+    cd web
+    npm install
+    npm run dev        # API + console on http://127.0.0.1:3000
+
+`npm run dev` starts `scripts/api_server.py` (with `.venv/Scripts/python.exe` when it exists, otherwise `python`) and then Next.js on 127.0.0.1:3000. Separately: `python scripts/api_server.py` and, in `web/`, `npm run dev:web`.
 
 | Page | What it shows |
 |---|---|
-| Home | system status (clean data, model, tuned settings, log check) and the headline benchmark results |
-| Attack lab | choose location, attack (none/step/drift/replay/spike/stuck), size, duration, start, noise, seed; interactive chart of observed vs expected, gap, detector scores and trust; "Why was this day flagged?"; CSV and PNG download |
-| Live replay | the same run revealed day by day, with the action badge and an alert when quarantine starts |
-| Integrity | provenance log with a per-record check, "Verify now", tamper demo, gateway cases, overhead measurement |
-| Benchmark | benchmark tables, charts and summary |
+| Overview | system status (clean data, model, tuned settings, log check), the pipeline, headline results and published failure modes |
+| Attack lab | choose location, attack (none/step/drift/replay/spike/stuck), size, duration, start, noise, seed; interactive chart of observed vs expected, gap, detector scores and trust; a per-day explanation; choices are shown as a judge challenge mode |
+| Live replay | the same run revealed day by day, with the action badge, an alert feed and a progress bar |
+| Integrity | provenance log with a per-record check, "Verify chain", tamper demo, gateway cases, overhead measurement |
+| Benchmark | benchmark tables, figures and the full summary |
+| Assess your data | upload a daily CSV, give coordinates, score it and download the verdict |
 
 If the data or model are missing, the app falls back to synthetic data and shows a banner.
 
@@ -83,13 +90,14 @@ The gateway demo shows altered, replayed, forged, unregistered and delayed messa
 
     pytest -q
 
-323 offline tests on synthetic data, about 1–2 minutes.
+318 offline tests on synthetic data, about 1–2 minutes.
 
 ## 8. Troubleshooting
 
 | Problem | Fix |
 |---|---|
-| `pytest` / `streamlit` "not recognized" | run `conda activate eo-trust` first |
+| `pytest` "not recognized" | run `conda activate eo-trust` first |
+| `npm` "not recognized" | install Node.js 20 or later, then run `npm install` in `web/` |
 | "run: python -m src.detect.context_model --train" | the model file is missing; run that command |
 | No Sentinel-2 data | optional; without it the cloud check is inactive and everything else works |
 | Verify fails on missing files | add `--allow-missing` (raw data is not in the repository) |

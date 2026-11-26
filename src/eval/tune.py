@@ -59,7 +59,7 @@ log = get_logger(__name__)
 
 FULL_GRIDS: dict[str, tuple] = {
     "step_h": (4.0, 5.0, 6.0, 8.0, 10.0, 12.0, 15.0, 20.0, 25.0, 30.0, 40.0),
-    "drift_L": (3.0, 3.5, 4.0, 4.5, 5.0, 6.0, 7.0, 8.0, 10.0),
+    "drift_L": (3.0, 3.5, 4.0, 4.5, 5.0, 6.0, 7.0, 8.0, 10.0, 12.0, 15.0),
     "drift_t": (3.0, 4.0, 5.0, 6.0, 8.0),
     "replay_near": (0.7, 0.75, 0.8, 0.85, 0.9, 0.95),
     "cons_minv": (1, 2, 3, 4),
@@ -72,7 +72,7 @@ QUICK_GRIDS: dict[str, tuple] = {
 SHAPE_GRID: dict[str, tuple] = {
     "penalty": (0.0, 0.005, 0.01, 0.02, 0.04),
     "min_ramp": (5, 10, 20),
-    "lookback": (30, 60, 90),
+    "lookback": (30, 60, 90, 120, 180),
 }
 QUICK_SHAPE_GRID: dict[str, tuple] = {"penalty": (0.0, 0.02), "min_ramp": (5, 10), "lookback": (60, 90)}
 DEFAULT_BUDGETS: dict[str, float] = {"step": 0.3, "drift": 0.3, "replay": 0.2, "consistency": 0.2}

@@ -135,7 +135,7 @@ Finished steps are skipped; `--force` re-runs training, tuning and the benchmark
 
 ---
 
-## Demo and web app
+## Demo and console
 
 ```
 python scripts/demo.py
@@ -143,17 +143,24 @@ python scripts/demo.py
 
 Injects a 12% step into a test location, prints the trust score and action day by day as the attack starts, then shows that editing a logged file is caught by the signed log.
 
+The console is a Next.js app in `web/` (Node.js 20 or later). It reads every number from the Python pipeline through a local API (`scripts/api_server.py`), so the interface cannot drift from the evaluated code.
+
 ```
-streamlit run app/app.py
+cd web
+npm install
+npm run dev        # API + console on http://127.0.0.1:3000
 ```
+
+`npm run dev` starts the API with `.venv/Scripts/python.exe` when that venv exists, otherwise with `python` on PATH. To run the two halves yourself, use `python scripts/api_server.py` and `npm run dev:web` in `web/`.
 
 | Page | What it shows |
 |---|---|
-| Home | system status and headline results |
-| Attack lab | choose a location and attack; see observed vs expected, detector scores, trust, and why each day was flagged |
+| Overview | system status, the pipeline, headline results, published failure modes |
+| Attack lab | choose a location and attack; observed vs expected, detector scores, trust, and a per-day explanation |
 | Live replay | the same run revealed day by day, with an alert when quarantine starts |
-| Integrity | the provenance log, live verification, tamper demo, gateway cases, overhead |
-| Benchmark | all tables and charts |
+| Integrity | the provenance log with a per-record check, live verification, tamper demo, gateway cases, overhead |
+| Benchmark | benchmark tables, figures and summary |
+| Assess your data | upload any daily CSV, score it, download the verdict |
 
 ---
 
@@ -168,7 +175,7 @@ python -m src.eval.tune                        # thresholds -> config/tuned.yaml
 python -m src.eval.run_benchmark --sweep       # benchmark -> results/
 python -m src.pipeline --location kairouan --attack step --size 0.12 --seed 1
 python -m src.trust.gateway --demo             # signed sensor + gateway attack cases
-pytest                                         # 323 offline tests
+pytest                                         # 318 offline tests
 ```
 
 **Sentinel-2 credentials (optional).** Create a free Copernicus Data Space account and an OAuth client (Sentinel Hub dashboard, User settings → OAuth clients), then set them for the current terminal only:
@@ -229,8 +236,8 @@ src/detect/      context_model.py, step.py, drift.py, replay.py, consistency.py,
 src/respond/     policy.py (trust -> action, hysteresis)
 src/pipeline.py  end-to-end daily pipeline
 src/eval/        scenarios.py, metrics.py, run_benchmark.py, tune.py
-app/             Streamlit web app
-scripts/         run_all.py, demo.py
+web/             Next.js console (TypeScript, Tailwind, rendered locally)
+scripts/         run_all.py, demo.py, api_server.py
 docs/            DATA.md, USER_GUIDE.md
 tests/           pytest suite (synthetic data, no internet)
 results/         benchmark outputs

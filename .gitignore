@@ -12,6 +12,15 @@ __pycache__/
 .ipynb_checkpoints/
 .pytest_cache/
 .venv/
+node_modules/
+.next/
+out/
+tsconfig.tsbuildinfo
+npm-install.log
+build.log
+dev.log
+pytest.log
+web/.preview-*.png
 .DS_Store
 
 # outputs of manual pipeline runs

@@ -52,7 +52,6 @@ scipy==1.17.1
 setuptools==84.2.0
 six==1.17.0
 starlette==1.9.0
-streamlit==1.66.0
 stumpy==1.14.1
 threadpoolctl==3.7.0
 typing_extensions==4.16.0
