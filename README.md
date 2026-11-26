@@ -9,7 +9,7 @@ A daily solar-radiation series can be falsified quietly: a 12% bias, a slow drif
 
 The second layer exists because the first one has a blind spot: a compromised sensor signs its false values with a valid key, and the signatures accept it.
 
-**Headline result:** on 5 test locations (out of 23) that the system never saw during training, in a year it never saw (2024), every standard attack (12% step, drift to 15%, 7-day replay) was caught in all 100 runs, with 0.4 to 0.7 false-alarm episodes per location-year, at a median 0.153 ms per location-day on a laptop.
+**Headline result:** on 5 test locations (out of 23) that the system never saw during training, in a year it never saw (2024), every standard attack (12% step, drift to 15%, 7-day replay) was caught in all 100 runs, with 0.0 to 0.2 false-alarm episodes per location-year, at a median 0.285 ms per location-day on a laptop.
 
 ---
 
@@ -83,14 +83,14 @@ Unseen test locations (5 sites × 20 seeds per attack), test year 2024. Full tab
 
 | Attack | Caught | Median delay | False alarms / location-year | F1 | ROC-AUC |
 |---|---|---|---|---|---|
-| Step +12% | 100% | 2 days | 0.40 | 0.93 | 0.99 |
-| Drift to +15% over 60 days | 100% | 10 days | 0.40 | 0.92 | 0.96 |
-| 7-day replay | 100% | 4.5 days | 0.71 | 0.33 | 0.86 |
-| Adaptive step (0.9 × detection limit = 2.7%) | 100% | 4.5 days | 0.41 | 0.77 | 0.85 |
+| Step +12% | 100% | 2 days | 0.00 | 0.91 | 0.98 |
+| Drift to +15% over 60 days | 100% | 10 days | 0.00 | 0.90 | 0.96 |
+| 7-day replay | 100% | 5 days | 0.24 | 0.49 | 0.88 |
+| Adaptive step (0.9 × detection limit = 2.7%) | 100% | 4.5 days | 0.79 | 0.88 | 0.88 |
 
-The same attacks on the 18 train locations in the unseen year 2024: all caught, median delays of 3, 13 and 4 days.
+The same attacks on the 18 train locations in the unseen year 2024: all caught, median delays of 3, 15 and 6 days.
 
-**Evasion.** Every upward step from +3% is caught. Downward steps are harder (−3%: 80% caught, −8%: 92%). Slower, smaller drifts are caught later: 5% over 180 days after a median of 37 days. Adding noise to a 7-day replay to defeat exact matching still leaves 96% caught; 3-day replays are caught 36% of the time.
+**Evasion.** Every upward step from +3% is caught. Downward steps are harder (−3%: 40% caught, −8%: 84%, −12%: 92%). Slower, smaller drifts are caught later: 5% over 180 days after a median of 37 days. Adding noise to a 7-day replay to defeat exact matching still leaves 96% caught; 3-day replays are caught 28% of the time.
 
 | Catch rate by step size | Delay by drift speed |
 |---|---|
@@ -100,7 +100,7 @@ The same attacks on the 18 train locations in the unseen year 2024: all caught, 
 |---|---|
 | ![False alarms and catch rate against threshold](results/false_alarms_vs_threshold.png) | ![Reliability diagram](results/reliability.png) |
 
-**Cost.** Median 0.153 ms per location-day and under 5 MB of peak memory. Signing a reading takes 0.038 ms; checking it 0.089 ms. A full benchmark (1,965 runs) takes 2 to 6 minutes on a laptop CPU.
+**Cost.** Median 0.285 ms per location-day and under 5 MB of peak memory. Signing a reading takes 0.038 ms; checking it 0.089 ms. A full benchmark (2,453 runs) takes about 6 minutes on a laptop CPU.
 
 ---
 
@@ -168,7 +168,7 @@ python -m src.eval.tune                        # thresholds -> config/tuned.yaml
 python -m src.eval.run_benchmark --sweep       # benchmark -> results/
 python -m src.pipeline --location kairouan --attack step --size 0.12 --seed 1
 python -m src.trust.gateway --demo             # signed sensor + gateway attack cases
-pytest                                         # 267 offline tests
+pytest                                         # 323 offline tests
 ```
 
 **Sentinel-2 credentials (optional).** Create a free Copernicus Data Space account and an OAuth client (Sentinel Hub dashboard, User settings → OAuth clients), then set them for the current terminal only:
@@ -187,10 +187,10 @@ Never write credentials into a file in the repository. Without them the system s
 `data/provenance/log.jsonl` holds one signed, hash-chained record per downloaded or derived file. Check it on a fresh clone (raw data is not in the repository, so file contents are skipped):
 
 ```
-python -m src.trust.verify --allow-missing --trust 21ded33c4cec6bf2 --expected-head 038ee7c91d72c20521f0b32035a0cf426e98a79486253f8daa9c01d8370ec7af
+python -m src.trust.verify --allow-missing --trust 21ded33c4cec6bf2 --expected-head f5368050c207f622701fdeffd32e683589580b87995c95f1dbb71a8c482bc4e0
 ```
 
-`--trust` pins the signing key id of the reference run; `--expected-head` checks that no records were removed from the end (120 records). Only one machine should append to the log, since another machine would create its own key.
+`--trust` pins the signing key id of the reference run; `--expected-head` checks that no records were removed from the end (184 records). Only one machine should append to the log, since another machine would create its own key.
 
 ---
 
@@ -243,10 +243,11 @@ results/         benchmark outputs
 - **Signatures prove integrity, not honesty.** They show that data is unchanged since it was signed, not that the source told the truth; that is the detectors' job.
 - **The context is assumed honest.** An attacker who also changes the neighbouring cells and the other variables consistently is out of scope.
 - **Calibration uses the first year.** An attack already active then is absorbed into the calibration.
-- **Cloudy tropical sites are slow.** At the test site abidjan, a 12% step takes a median of about a month to alarm, and a 2.7% step about five months.
+- **Cloudy tropical sites are slow.** At the test site abidjan, a 12% step takes a median of about six weeks to alarm, and a 2.7% step about five months.
 - **Downward bias is harder.** The clear-sky check only sees inflated values; deflation relies on the statistical detectors and is caught later.
-- **Short replays.** 3-day replays are shorter than the matching window and are caught 36% of the time.
-- **Replay per-day precision is low** (0.26): an alarm persists for a few days after the copied week ends.
+- **A patient upward lie survives.** A bias kept under the drift threshold never accumulates into a violation: the largest constant upward bias that stays hidden for 180 days is 0.5% at the median of the 8 newer sites (range 0.0–5.3%), and a week-by-week greedy attacker holds a 15.8% mean bias at guangzhou for 180 days without an alarm. Only helsinki was caught, on day 105.
+- **Short replays.** 3-day replays are shorter than the matching window and are caught 28% of the time.
+- **Replay per-day precision is low** (0.58): an alarm persists for a few days after the copied week ends.
 - **Gridded data as the sensor.** NASA POWER plays the role of the in-situ stream; on a real ground station the context model would be less accurate and the clear-sky check would need a tolerance.
 
 ---

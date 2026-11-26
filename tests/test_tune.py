@@ -61,7 +61,9 @@ def test_tune_quick_writes_valid_yaml(frames, tmp_path):
     out = tmp_path / "tuned.yaml"
     t0 = time.perf_counter()
     res = tune.tune(frames, CFG, quick=True, out_path=out, models_dir=tmp_path)
-    assert time.perf_counter() - t0 < 30
+    # Hang guard only: the quick grid gained shape-label tuning and LR fusion
+    # (ad165fe), so it now takes ~30 s on the reference laptop. Content is checked below.
+    assert time.perf_counter() - t0 < 120
     data = yaml.safe_load(out.read_text(encoding="utf-8"))
     for section in ("step", "drift", "replay", "consistency", "tuning"):
         assert section in data

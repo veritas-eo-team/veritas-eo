@@ -133,11 +133,11 @@ A frame is rebuilt only if an input file hash or a relevant setting changes.
 
 Every downloaded file and every clean frame is recorded in `data/provenance/log.jsonl`: one signed, hash-chained record per file, with the SHA-256 of the file, the API request (download) or the input hashes (derived), the code version, and an Ed25519 signature.
 
-Reference run: 120 records, signing key id `21ded33c4cec6bf2`, head hash `038ee7c91d72c20521f0b32035a0cf426e98a79486253f8daa9c01d8370ec7af`.
+Reference run: 184 records, signing key id `21ded33c4cec6bf2`, head hash `f5368050c207f622701fdeffd32e683589580b87995c95f1dbb71a8c482bc4e0`.
 
 Check on a fresh copy (raw data is not in the repository, so file contents are skipped):
 
-    python -m src.trust.verify --allow-missing --trust 21ded33c4cec6bf2 --expected-head 038ee7c91d72c20521f0b32035a0cf426e98a79486253f8daa9c01d8370ec7af
+    python -m src.trust.verify --allow-missing --trust 21ded33c4cec6bf2 --expected-head f5368050c207f622701fdeffd32e683589580b87995c95f1dbb71a8c482bc4e0
 
 Re-downloading on another machine creates a new signing key and new records. To reproduce the reported results, use the committed clean frames; there is no need to download.
 

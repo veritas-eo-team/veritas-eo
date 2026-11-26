@@ -71,7 +71,7 @@ Full pipeline from scratch (download → align → train → tune → benchmark 
 
 ## 6. Trust anchor
 
-    python -m src.trust.verify --allow-missing --trust 21ded33c4cec6bf2 --expected-head 038ee7c91d72c20521f0b32035a0cf426e98a79486253f8daa9c01d8370ec7af
+    python -m src.trust.verify --allow-missing --trust 21ded33c4cec6bf2 --expected-head f5368050c207f622701fdeffd32e683589580b87995c95f1dbb71a8c482bc4e0
     python -m src.trust.verify --demo            # tamper demo on a temporary copy
     python -m src.trust.verify --bench           # signing / verification overhead
     python -m src.trust.gateway --demo           # signed sensor + gateway attack cases
@@ -83,7 +83,7 @@ The gateway demo shows altered, replayed, forged, unregistered and delayed messa
 
     pytest -q
 
-267 offline tests on synthetic data, about 1–2 minutes.
+323 offline tests on synthetic data, about 1–2 minutes.
 
 ## 8. Troubleshooting
 
