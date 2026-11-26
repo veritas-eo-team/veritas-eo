@@ -1,12 +1,12 @@
 # written by: python -m src.eval.tune (train locations only, years before test_year)
 step:
-  phi: 0.1342
-  k: 1.1099
-  h: 20.0
+  phi: 0.1632
+  k: 1.0619
+  h: 30.0
 drift:
-  phi: 0.1342
-  L: 6.0
-  t_thr: 6.0
+  phi: 0.1632
+  L: 10.0
+  t_thr: 8.0
 replay:
   near_thr: 0.9
 consistency:
@@ -14,26 +14,34 @@ consistency:
   min_violations: 2
   cloud_min_violations: 6
 fusion:
-  shape_penalty: 0.005
+  shape_penalty: 0.01
   shape_min_ramp: 5
   shape_lookback: 90
 tuning:
   train_locations:
   - ames
   - black_forest
+  - chiang_mai
+  - guangzhou
+  - helsinki
+  - la_paz
+  - lhasa
   - ludhiana
   - manaus
   - nairobi
+  - niamey
   - paris
   - phoenix
+  - riyadh
   - seville
   - tozeur
   - tunis
+  - winnipeg
   years:
   - 2019
   - 2023
-  clean_location_years: 49.9932
-  attacked_series: 150
+  clean_location_years: 89.9877
+  attacked_series: 270
   fa_target_per_location_year: 1.0
   budgets:
     step: 0.3
@@ -41,30 +49,30 @@ tuning:
     replay: 0.2
     consistency: 0.2
   cloud_conflict_clean:
-    cloudy_days: 3338
-    conflict_days: 826
-    rate: 0.2475
+    cloudy_days: 5196
+    conflict_days: 1146
+    rate: 0.2206
   system_before:
-    fa_per_location_year: 1.9003
+    fa_per_location_year: 1.9669
     catch_step: 1.0
     catch_drift: 1.0
     catch_replay: 1.0
   system_after:
-    fa_per_location_year: 0.26
+    fa_per_location_year: 0.0333
     catch_step: 1.0
     catch_drift: 1.0
     catch_replay: 1.0
   shape_labels:
-    cases: 200
+    cases: 360
     chosen_accuracy:
-      drift_30d: 0.56
-      drift_alarm: 0.14
-      step_30d: 0.86
-      step_alarm: 0.7
+      drift_30d: 0.4333
+      drift_alarm: 0.1333
+      step_30d: 0.9333
+      step_alarm: 0.7222
     default_accuracy:
-      drift_30d: 0.3
-      drift_alarm: 0.04
-      step_30d: 0.98
-      step_alarm: 0.88
-  fusion_brier_rules: 0.0097
-  fusion_brier_lr_location_oof: 0.0076
+      drift_30d: 0.3333
+      drift_alarm: 0.0778
+      step_30d: 0.9667
+      step_alarm: 0.8333
+  fusion_brier_rules: 0.011
+  fusion_brier_lr_location_oof: 0.0078
